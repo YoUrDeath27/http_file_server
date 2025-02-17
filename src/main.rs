@@ -1,0 +1,132 @@
+use std::{
+    fs,
+    io::{prelude::*, Read, Write},
+    net::{TcpListener, TcpStream},
+};
+
+// use std::thread;
+use std::time::Duration;
+// use std::path::Path;
+
+fn main() {
+    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+
+    for stream in listener.incoming() {
+        let stream = stream.unwrap();
+        println!("stream1 = {:?}", stream);
+        handle_connection(stream);
+    }
+}
+
+fn handle_connection(mut stream: TcpStream) {
+    let mut buffer = vec![0u8; 2048]; // Fixed-size buffer
+    let mut received_data = Vec::new(); // Growable vector (this is what u should give forward)
+                                        // stream.set_read_timeout(Some(Duration::from_millis(4000)));
+    loop {
+        let bytes_read = stream.read(&mut buffer).unwrap();
+        if bytes_read == 0 {
+            break;
+        }
+        received_data.extend_from_slice(&buffer[..bytes_read]);
+
+        // Check if we've received the full headers
+        // if received_data.windows(4).any(|window| {
+        //                                         println!("window?    {:?}",window );
+        //                                         window == b"\r\n\r\n"}) {
+        //     println!("in bytes = {:?} \n", b"\r\n\r\n done" );
+        //     break;
+        // }
+
+        // println!("raw info from buffer:\n {:?}", String::from_utf8_lossy(&buffer[..]));
+        // println!("\n\n\nraw info from received data:\n {:?}", String::from_utf8_lossy(&received_data[..]));
+        if received_data[received_data.len() - 4..] == *b"\r\n\r\n" {
+            get_method(stream, received_data);
+            break;
+        }
+        if received_data[received_data.len() - 2..] == *b"\r\n" {
+            println!("\n\n\n\n\n\nGot the post request, chill man\n\n");
+            post_method(stream, received_data);
+            break;
+        }
+    }
+    // stream.read(&mut buffer).unwrap();
+
+    // println!("\n\n\n\n\n\n\n\nRequest: {} done with data", String::from_utf8_lossy(&buffer[..]));
+
+    // println!("Raw request: {:?}", &buffer[..]);
+    // get_method(stream);
+    //u did a simple web server
+    //now make it a file server
+}
+
+fn get_method(mut stream: TcpStream, mut buffer: Vec<u8>) {
+    let mut file = fs::File::open("index.html").unwrap();
+    let status_line = "HTTP/1.1 200 OK\r\n\r\n";
+    let mut contents = String::new();
+    file.read_to_string(&mut contents).unwrap();
+
+    println!("Request: {}", String::from_utf8_lossy(&buffer[..]));
+    println!("Done with the GET request my guy");
+
+    let response = format!("{}{}", status_line, contents);
+    // println!("{}", response);
+    stream.write(response.as_bytes()).unwrap();
+    stream.flush().unwrap();
+}
+
+fn post_method(mut stream: TcpStream, mut buffer: Vec<u8>) {
+    let mut file = fs::File::open("POST.html").unwrap();
+
+    let status_line = "HTTP/1.1 200 OK\r\n\r\n";
+    let mut contents = String::new();
+    file.read_to_string(&mut contents).unwrap();
+    // println!("file: {:?}", file);
+    // println!("content of file: {}", contents);
+    /*
+    let contents = String::from("
+        <html lang=\"en\">
+        <head>
+        <meta charset=\"UTF-8\">
+        <title>File Upload</title>
+        </head>
+        <body>
+        <h1>Hello!</h1>
+        <p>Hi from Rust</p>
+        <h1>POST REQUEST DONE</h1>
+
+        <form action=\"/upload\" method=\"POST\" enctype=\"multipart/form-data\">
+            <input type=\"file\" name=\"file\" required>
+            <button type=\"submit\">Upload</button>
+        </form>
+        <h3> this is interesting blud </h3>
+        </body>
+        </html>"); */
+
+    // println!("buffer = {:?}", buffer); // its in bytes
+
+    // println!("Request: {}", String::from_utf8_lossy(&buffer[..]));
+    println!(
+        "\n\n\n\nRequest raw: {:?}",
+        String::from_utf8_lossy(&buffer[..])
+    );
+    println!("\n\nDone with the POST request my guy");
+
+    if buffer.windows(56).any(|windows| {
+        println!(
+            "Trying to find the end {:?}",
+            String::from_utf8_lossy(windows)
+        );
+        windows == b"------geckoformboundary6dcfcc9bca8ea47825b5fa58b2e4e137--"
+    }) {
+        println!("Found the end boss");
+    }
+    for i in &buffer[..] {
+
+        // println!("idfk {} in bytes {} string my guy", buffer.nth(), String::from_utf8_lossy(buffer))
+    }
+
+    let response = format!("{}{}", status_line, contents);
+    // println!("{}", response);
+    stream.write(response.as_bytes()).unwrap();
+    stream.flush().unwrap();
+}
