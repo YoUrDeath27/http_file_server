@@ -111,19 +111,16 @@ fn post_method(mut stream: TcpStream, mut buffer: Vec<u8>) {
     );
     println!("\n\nDone with the POST request my guy");
 
-    if buffer.windows(56).any(|windows| {
-        println!(
-            "Trying to find the end {:?}",
-            String::from_utf8_lossy(windows)
-        );
-        windows == b"------geckoformboundary6dcfcc9bca8ea47825b5fa58b2e4e137--"
-    }) {
-        println!("Found the end boss");
-    }
-    for i in &buffer[..] {
-
-        // println!("idfk {} in bytes {} string my guy", buffer.nth(), String::from_utf8_lossy(buffer))
-    }
+    // if buffer.windows(57).any(|windows| {
+    //     println!(
+    //         "Trying to find the end {:?} \n and in bytes {:?}",
+    //         String::from_utf8_lossy(windows),
+    //         windows
+    //     );
+    //     windows == b"------geckoformboundary6dcfcc9bca8ea47825b5fa58b2e4e137--"
+    // }) {
+    //     println!("Found the end boss");
+    // }
 
     let response = format!("{}{}", status_line, contents);
     // println!("{}", response);
