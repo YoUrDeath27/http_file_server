@@ -3,6 +3,7 @@ use std::{
     io::{prelude::*, Read, Write},
     net::{TcpListener, TcpStream},
 };
+use memchr::memmem;
 
 // use std::thread;
 use std::time::Duration;
@@ -10,6 +11,7 @@ use std::time::Duration;
 
 fn main() {
     let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+    fs::create_dir_all("uploads").unwrap(); // Create uploads directory
 
     for stream in listener.incoming() {
         let stream = stream.unwrap();
@@ -102,25 +104,66 @@ fn post_method(mut stream: TcpStream, mut buffer: Vec<u8>) {
         </body>
         </html>"); */
 
-    // println!("buffer = {:?}", buffer); // its in bytes
-
-    // println!("Request: {}", String::from_utf8_lossy(&buffer[..]));
-    println!(
-        "\n\n\n\nRequest raw: {:?}",
-        String::from_utf8_lossy(&buffer[..])
-    );
+    // println!(
+    //     "\n\n\n\nRequest raw: {}",
+    //     String::from_utf8_lossy(&buffer[..])
+    // );
     println!("\n\nDone with the POST request my guy");
+    let bytes_buffer = &buffer[..];
+    let buffer = String::from_utf8_lossy(&buffer[..]);
 
-    // if buffer.windows(57).any(|windows| {
-    //     println!(
-    //         "Trying to find the end {:?} \n and in bytes {:?}",
-    //         String::from_utf8_lossy(windows),
-    //         windows
-    //     );
-    //     windows == b"------geckoformboundary6dcfcc9bca8ea47825b5fa58b2e4e137--"
-    // }) {
-    //     println!("Found the end boss");
-    // }
+    let boundary_b = memmem::find(bytes_buffer, b"boundary=").map(|pos| pos as usize).unwrap();
+    let boundary_b = &bytes_buffer[boundary_b + "boundary=".len()..];
+    let boundary_right = memmem::find(boundary_b, b"\r\n").map(|pos| pos as usize).unwrap();
+    let boundary = &boundary_b[..boundary_right];
+    let full_boundary = format!("--{:?}", boundary).into_bytes();
+
+    println!("boundary in bytes = {}", String::from_utf8_lossy(&boundary[..]));
+    println!("\n\ncontent = {}", String::from_utf8_lossy(&bytes_buffer[..]));
+
+    let mut content_start = memmem::find_iter(bytes_buffer, &full_boundary).map(|p| p as usize).next();
+    // let content = &bytes_buffer[content_start + boundary.len()..];
+
+
+    // println!("\n\n\ncontent? {}",String::from_utf8_lossy(&content[..]));
+    println!("\n\n\niter = {:?}", content_start);
+
+    
+    
+    
+    // let boundary = buffer
+    //                 .split("boundary=")
+    //                 .nth(1)
+    //                 .unwrap()
+    //                 .split("\r\n")
+    //                 .nth(0)
+    //                 .unwrap();
+    // let boundary = format!("--{}", boundary);
+
+    // let file_content = buffer
+    //                     .split(&boundary) // doesnt accept a String so we give a pointer
+    //                     .nth(1)
+    //                     .unwrap();
+    // let data = file_content
+    //             .split("\r\n\r\n")
+    //             .nth(0)
+    //             .unwrap();
+
+    // println!("boundary = {:#?}", boundary);
+    // println!("data = {}\n\n", data);
+    // // println!("content = {:#?}", file_content);
+    // let title = data
+    //             .split("filename=")
+    //             .nth(1)
+    //             .unwrap()
+    //             .split("\"")
+    //             .nth(1)
+    //             .unwrap();
+    // println!("title = {}", title);
+    // let mut file = fs::File::create(format!("uploads/{}", title)).unwrap();
+    
+    // file.write_all(bytes_buffer);
+
 
     let response = format!("{}{}", status_line, contents);
     // println!("{}", response);
