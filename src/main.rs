@@ -114,20 +114,18 @@ fn post_method(mut stream: TcpStream, mut buffer: Vec<u8>) {
 
     let boundary_b = memmem::find(bytes_buffer, b"boundary=").map(|pos| pos as usize).unwrap();
     let boundary_b = &bytes_buffer[boundary_b + "boundary=".len()..];
-    let boundary_right = memmem::find(boundary_b, b"\r\n").map(|pos| pos as usize).unwrap();c
+    let boundary_right = memmem::find(boundary_b, b"\r\n").map(|pos| pos as usize).unwrap();
     let boundary = &boundary_b[..boundary_right];
-    let full_boundary = format!("--{:?}", boundary).into_bytes();
+    let boundary = format!("--{}", String::from_utf8_lossy(&boundary[..])).into_bytes();
 
-    println!("boundary in bytes = {}", String::from_utf8_lossy(&boundary[..]));
+    println!("boundary in bytes = {:?}", String::from_utf8_lossy(&boundary[..]));
     println!("\n\ncontent = {}", String::from_utf8_lossy(&bytes_buffer[..]));
 
-    let mut content_start = memmem::find_iter(bytes_buffer, &full_boundary).map(|p| p as usize).next();
-    // let content = &bytes_buffer[content_start + boundary.len()..];
+    let mut content_start = memmem::find_iter(bytes_buffer, &boundary).map(|p| p as usize).next().unwrap();
+    let content = &bytes_buffer[content_start + boundary.len()..];
 
 
-    // println!("\n\n\ncontent? {}",String::from_utf8_lossy(&content[..]));
-    println!("\n\n\niter = {:?}", content_start);
-
+    println!("\n\n\ncontent? {}",String::from_utf8_lossy(&content[..]));
     
     
     
@@ -164,6 +162,10 @@ fn post_method(mut stream: TcpStream, mut buffer: Vec<u8>) {
     
     // file.write_all(bytes_buffer);
 
+    let haystack = b"foo bar foo baz foo";
+    let mut it = memmem::find_iter(haystack, b"foo");
+    println!("found = {:?}", it.next());
+    println!("found = {:?}", it.next());
 
     let response = format!("{}{}", status_line, contents);
     // println!("{}", response);
