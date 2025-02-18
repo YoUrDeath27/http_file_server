@@ -114,7 +114,7 @@ fn post_method(mut stream: TcpStream, mut buffer: Vec<u8>) {
 
     let boundary_b = memmem::find(bytes_buffer, b"boundary=").map(|pos| pos as usize).unwrap();
     let boundary_b = &bytes_buffer[boundary_b + "boundary=".len()..];
-    let boundary_right = memmem::find(boundary_b, b"\r\n").map(|pos| pos as usize).unwrap();
+    let boundary_right = memmem::find(boundary_b, b"\r\n").map(|pos| pos as usize).unwrap();c
     let boundary = &boundary_b[..boundary_right];
     let full_boundary = format!("--{:?}", boundary).into_bytes();
 
