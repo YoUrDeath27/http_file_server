@@ -76,41 +76,8 @@ fn get_method(mut stream: TcpStream, mut buffer: Vec<u8>) {
     stream.flush().unwrap();
 }
 
-fn post_method(mut stream: TcpStream, mut buffer: Vec<u8>) {
-    let mut file = fs::File::open("POST.html").unwrap();
-
-    let status_line = "HTTP/1.1 200 OK\r\n\r\n";
-    let mut contents = String::new();
-    file.read_to_string(&mut contents).unwrap();
-    // println!("file: {:?}", file);
-    // println!("content of file: {}", contents);
-    /*
-    let contents = String::from("
-        <html lang=\"en\">
-        <head>
-        <meta charset=\"UTF-8\">
-        <title>File Upload</title>
-        </head>
-        <body>
-        <h1>Hello!</h1>
-        <p>Hi from Rust</p>
-        <h1>POST REQUEST DONE</h1>
-
-        <form action=\"/upload\" method=\"POST\" enctype=\"multipart/form-data\">
-            <input type=\"file\" name=\"file\" required>
-            <button type=\"submit\">Upload</button>
-        </form>
-        <h3> this is interesting blud </h3>
-        </body>
-        </html>"); */
-
-    // println!(
-    //     "\n\n\n\nRequest raw: {}",
-    //     String::from_utf8_lossy(&buffer[..])
-    // );
-    println!("\n\nDone with the POST request my guy");
+fn post_method(mut stream: TcpStream, mut buffer: Vec<u8>) {    
     let bytes_buffer = &buffer[..];
-    let buffer = String::from_utf8_lossy(&buffer[..]);
 
     let boundary_b = memmem::find(bytes_buffer, b"boundary=").map(|pos| pos as usize).unwrap();
     let boundary_b = &bytes_buffer[boundary_b + "boundary=".len()..];
@@ -118,55 +85,39 @@ fn post_method(mut stream: TcpStream, mut buffer: Vec<u8>) {
     let boundary = &boundary_b[..boundary_right];
     let boundary = format!("--{}", String::from_utf8_lossy(&boundary[..])).into_bytes();
 
-    println!("boundary in bytes = {:?}", String::from_utf8_lossy(&boundary[..]));
-    println!("\n\ncontent = {}", String::from_utf8_lossy(&bytes_buffer[..]));
+    let mut content_boundary = memmem::find_iter(bytes_buffer, &boundary).map(|p| p as usize).next().unwrap();
+    let info = &bytes_buffer[content_boundary + boundary.len()..];
 
-    let mut content_start = memmem::find_iter(bytes_buffer, &boundary).map(|p| p as usize).next().unwrap();
-    let content = &bytes_buffer[content_start + boundary.len()..];
-
-
-    println!("\n\n\ncontent? {}",String::from_utf8_lossy(&content[..]));
+    let contents_find = memmem::find_iter(info, b"\r\n\r\n").map(|p| p as usize).next().unwrap();
     
+    let content = &info[contents_find + b"\r\n\r\n".len().. info.len() - (boundary.len() + 4)];
+    let info = &info[..contents_find];
+
+    // println!("contents = {}", String::from_utf8_lossy(&content[..]));
+    // println!("info = {}", String::from_utf8_lossy(&info[..]));
+
+    let filename = memmem::find_iter(info, b"filename=").map(|p| p as usize).next().unwrap();
+    let filename_data = &info[filename + "filename=".len()..];
+    let mut filename1 = memmem::find_iter(filename_data, "\"").map(|p| p as usize);
+
+    let filename_1 = filename1.next().unwrap();
+    let filename_2 = filename1.next().unwrap();
+
+    let filename = &filename_data[filename_1 + 1.. filename_2];
+
+    let filename = format!("uploads/{}",String::from_utf8_lossy(&filename[..]));
+
+    let mut file = fs::File::create(filename).unwrap();
     
-    
-    // let boundary = buffer
-    //                 .split("boundary=")
-    //                 .nth(1)
-    //                 .unwrap()
-    //                 .split("\r\n")
-    //                 .nth(0)
-    //                 .unwrap();
-    // let boundary = format!("--{}", boundary);
+    file.write_all(content);
 
-    // let file_content = buffer
-    //                     .split(&boundary) // doesnt accept a String so we give a pointer
-    //                     .nth(1)
-    //                     .unwrap();
-    // let data = file_content
-    //             .split("\r\n\r\n")
-    //             .nth(0)
-    //             .unwrap();
+    let mut f = fs::File::open("POST.html").unwrap();
 
-    // println!("boundary = {:#?}", boundary);
-    // println!("data = {}\n\n", data);
-    // // println!("content = {:#?}", file_content);
-    // let title = data
-    //             .split("filename=")
-    //             .nth(1)
-    //             .unwrap()
-    //             .split("\"")
-    //             .nth(1)
-    //             .unwrap();
-    // println!("title = {}", title);
-    // let mut file = fs::File::create(format!("uploads/{}", title)).unwrap();
-    
-    // file.write_all(bytes_buffer);
+    let status_line = "HTTP/1.1 200 OK\r\n\r\n";
+    let mut contents = String::new();
+    f.read_to_string(&mut contents).unwrap();
 
-    let haystack = b"foo bar foo baz foo";
-    let mut it = memmem::find_iter(haystack, b"foo");
-    println!("found = {:?}", it.next());
-    println!("found = {:?}", it.next());
-
+    println!("\n\nDone with the POST request my guy");
     let response = format!("{}{}", status_line, contents);
     // println!("{}", response);
     stream.write(response.as_bytes()).unwrap();
