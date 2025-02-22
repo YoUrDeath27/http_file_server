@@ -12,114 +12,235 @@ use std::time::Duration;
 fn main() {
     let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
     fs::create_dir_all("uploads").unwrap(); // Create uploads directory
+    fs::create_dir_all("data").unwrap();
 
     for stream in listener.incoming() {
         let stream = stream.unwrap();
-        println!("stream1 = {:?}", stream);
+        // println!("stream1 = {:?}", stream);
         handle_connection(stream);
     }
+    println!("idfk what happens here");
 }
 
 fn handle_connection(mut stream: TcpStream) {
-    let mut buffer = vec![0u8; 2048]; // Fixed-size buffer
+    let mut buffer = vec![0u8; 4096]; // Fixed-size buffer
     let mut received_data = Vec::new(); // Growable vector (this is what u should give forward)
                                         // stream.set_read_timeout(Some(Duration::from_millis(4000)));
     loop {
         let bytes_read = stream.read(&mut buffer).unwrap();
+        println!("bytes_read = {}", bytes_read);
+
         if bytes_read == 0 {
             break;
         }
+
         received_data.extend_from_slice(&buffer[..bytes_read]);
+        // println!("Request: {}", String::from_utf8_lossy(&received_data[..]));
 
-        // Check if we've received the full headers
-        // if received_data.windows(4).any(|window| {
-        //                                         println!("window?    {:?}",window );
-        //                                         window == b"\r\n\r\n"}) {
-        //     println!("in bytes = {:?} \n", b"\r\n\r\n done" );
-        //     break;
-        // }
-
-        // println!("raw info from buffer:\n {:?}", String::from_utf8_lossy(&buffer[..]));
-        // println!("\n\n\nraw info from received data:\n {:?}", String::from_utf8_lossy(&received_data[..]));
-        if received_data[received_data.len() - 4..] == *b"\r\n\r\n" {
+        if received_data[..3] == *b"GET" && bytes_read < buffer.len() {
             get_method(stream, received_data);
             break;
         }
-        if received_data[received_data.len() - 2..] == *b"\r\n" {
-            println!("\n\n\n\n\n\nGot the post request, chill man\n\n");
+        if received_data[..4] == *b"POST" && bytes_read < buffer.len() {
             post_method(stream, received_data);
             break;
         }
     }
-    // stream.read(&mut buffer).unwrap();
-
-    // println!("\n\n\n\n\n\n\n\nRequest: {} done with data", String::from_utf8_lossy(&buffer[..]));
-
-    // println!("Raw request: {:?}", &buffer[..]);
-    // get_method(stream);
-    //u did a simple web server
-    //now make it a file server
 }
 
 fn get_method(mut stream: TcpStream, mut buffer: Vec<u8>) {
-    let mut file = fs::File::open("index.html").unwrap();
-    let status_line = "HTTP/1.1 200 OK\r\n\r\n";
-    let mut contents = String::new();
-    file.read_to_string(&mut contents).unwrap();
+  
+    if &buffer[..6] == b"GET / " ||  
+       &buffer[..16] == b"GET /favicon.ico" ||
+       &buffer[..11] == b"GET /upload"{
+        let status_line = "HTTP/1.1 200 OK\r\n";
+    
+        println!("Done with the GET request my guy");
+    
+        let response = format!("{}{}", status_line, web());
+        // println!("{}", response);
+        stream.write(response.as_bytes()).unwrap();
+        stream.flush().unwrap();
+    }
+    else {
+        // (mut stream: TcpStream, mut buffer: Vec<u8>, entries: Vec<String>)
+        send_file(stream, buffer);
+    }
 
-    println!("Request: {}", String::from_utf8_lossy(&buffer[..]));
-    println!("Done with the GET request my guy");
+    
+}
 
-    let response = format!("{}{}", status_line, contents);
-    // println!("{}", response);
+fn post_method(mut stream: TcpStream, mut buffer: Vec<u8>) {  
+
+    let response = upload_file(buffer);
+
+    println!("responnse = {}", response);
+    
+    // println!("response in post receive part= {}", response);
     stream.write(response.as_bytes()).unwrap();
     stream.flush().unwrap();
 }
 
-fn post_method(mut stream: TcpStream, mut buffer: Vec<u8>) {    
-    let bytes_buffer = &buffer[..];
+fn upload_file(mut buffer: Vec<u8>) -> String {
+    let buffer = &buffer[..];
+    
+    // println!("buffer in upload_file={}", String::from_utf8_lossy(&buffer[..]));
 
-    let boundary_b = memmem::find(bytes_buffer, b"boundary=").map(|pos| pos as usize).unwrap();
-    let boundary_b = &bytes_buffer[boundary_b + "boundary=".len()..];
+    let boundary_b = memmem::find(buffer, b"boundary=").map(|pos| pos as usize).unwrap();
+    let boundary_b = &buffer[boundary_b + "boundary=".len()..];
     let boundary_right = memmem::find(boundary_b, b"\r\n").map(|pos| pos as usize).unwrap();
     let boundary = &boundary_b[..boundary_right];
     let boundary = format!("--{}", String::from_utf8_lossy(&boundary[..])).into_bytes();
 
-    let mut content_boundary = memmem::find_iter(bytes_buffer, &boundary).map(|p| p as usize).next().unwrap();
-    let info = &bytes_buffer[content_boundary + boundary.len()..];
+    println!("boundary={}", String::from_utf8_lossy(&boundary[..]));
+    let mut content_boundary = memmem::find_iter(buffer, &boundary).map(|p| p as usize).next().unwrap();
+    let info = &buffer[content_boundary + boundary.len()..];
 
     let contents_find = memmem::find_iter(info, b"\r\n\r\n").map(|p| p as usize).next().unwrap();
-    
     let content = &info[contents_find + b"\r\n\r\n".len().. info.len() - (boundary.len() + 4)];
     let info = &info[..contents_find];
 
-    // println!("contents = {}", String::from_utf8_lossy(&content[..]));
-    // println!("info = {}", String::from_utf8_lossy(&info[..]));
+    let mut content_type = memmem::find_iter(buffer, b"Content-Type:").map(|p| p as usize);
+    let _ = content_type.next();
+    let content_type = content_type.next().unwrap();
+    let content_type = &buffer[content_type + "Content-Type:\"".len()..];
+    let end = memmem::find(&content_type, b"\r\n\r\n").map(|p| p as usize).unwrap();
+    let content_type = &content_type[..end];
+
+    println!("Content-Type = {}", String::from_utf8_lossy(&content_type[..]));
 
     let filename = memmem::find_iter(info, b"filename=").map(|p| p as usize).next().unwrap();
     let filename_data = &info[filename + "filename=".len()..];
     let mut filename1 = memmem::find_iter(filename_data, "\"").map(|p| p as usize);
-
     let filename_1 = filename1.next().unwrap();
     let filename_2 = filename1.next().unwrap();
-
     let filename = &filename_data[filename_1 + 1.. filename_2];
-
-    let filename = format!("uploads/{}",String::from_utf8_lossy(&filename[..]));
-
-    let mut file = fs::File::create(filename).unwrap();
-    
+    let filename_upload = format!("uploads/{}",String::from_utf8_lossy(&filename[..]));
+    let mut file = fs::File::create(&filename_upload).unwrap();
     file.write_all(content);
 
-    let mut f = fs::File::open("POST.html").unwrap();
+    let filename_data = format!("data/{}",String::from_utf8_lossy(&filename[..]) );
+    let mut file2 = fs::File::create(format!("{}.txt", &filename_data)).unwrap();
 
-    let status_line = "HTTP/1.1 200 OK\r\n\r\n";
-    let mut contents = String::new();
-    f.read_to_string(&mut contents).unwrap();
+    file2.write_all(&format!("Content-Type:{}",String::from_utf8_lossy(&content_type[..])).into_bytes()[..]);//idk how this works
+    //till here we saved the file on the server (hopefully)
+
+    let status_line = "HTTP/1.1 200 OK\r\n";    
 
     println!("\n\nDone with the POST request my guy");
-    let response = format!("{}{}", status_line, contents);
-    // println!("{}", response);
+    let response = format!("{}{}", status_line, web());
+    response
+}
+
+fn web() ->  String {
+    let entries = fs::read_dir("uploads").unwrap();
+    let mut file_names = Vec::new();
+
+    for entry in entries {
+        let entry = entry.unwrap();
+        let file_name = entry.file_name().into_string().unwrap();
+        file_names.push(file_name);
+    }
+
+    let mut html = String::from("    
+<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+<meta charset=\"UTF-8\">
+<title>File Upload</title>
+</head>
+
+<style>
+    li{
+        display: flex;
+        padding: 10px;
+    }
+
+
+    li > form > button{
+        margin: 0 10px;
+    }
+</style>
+
+<body>
+<h1>Hello!</h1>
+<p>Hi from Rust</p>
+<h1>POST REQUEST DONE</h1>
+
+<form action=\"/\" method=\"POST\" enctype=\"multipart/form-data\">
+    <input type=\"file\" name=\"file\" required>
+    <button type=\"submit\">Upload</button>
+</form>
+<h2> Saved Files:</h2>
+<ul>");
+    
+    for i in 0..file_names.len(){
+        html.push_str(&*format!(
+            "<li> 
+               <a href=\"{}\"> {} </a>
+            </li>\n", 
+            i + 1,
+            file_names[i]
+        ));         
+    }
+
+    html.push_str("
+        </ul>
+        </body>
+        </html>");
+
+    return html
+}
+
+
+//this function works fine as it is, DONT U DARE CHANGE SMTH ABT IT
+fn send_file(mut stream: TcpStream, mut buffer: Vec<u8>) {
+    let buffer = &buffer[..];
+
+    let entries = fs::read_dir("uploads").unwrap();
+    let mut file_names: Vec<String> = Vec::new();
+    for entry in entries {
+        let entry = entry.unwrap();
+        let file_name = entry.file_name().into_string().unwrap();
+        file_names.push(file_name);
+        println!("entry = {:#?}", entry)
+    }
+
+    //return file \/
+    let index = memmem::find(buffer, b"/").map(|p| p as usize).unwrap();
+    let index = &buffer[index + 1 ..];
+    let end = memmem::find(index, b" ").map(|p| p as usize).unwrap();
+    let index = String::from_utf8_lossy(&index[..end]);
+    let index = index.parse::<usize>().unwrap();
+    
+    let mut file = fs::File::open(format!("uploads/{}",file_names[index - 1])).unwrap();
+    let mut data = fs::File::open(format!("data/{}.txt", file_names[index - 1])).unwrap();
+
+    println!("try = {}", file_names[index - 1]);
+    let mut read = Vec::new();
+    file.read_to_end(&mut read).unwrap();
+
+    let mut content_type = String::new();
+    data.read_to_string(&mut content_type);
+
+    println!("type of file = {:?}", content_type);
+
+    let status_line = "HTTP/1.1 200 OK\r\n";
+
+    let response = format!("{}{}\r\nContent-Disposition: attachment; filename=\"{}\"\r\nContent-Length: {}\r\n\r\n",
+            status_line, 
+            content_type,
+            file_names[index - 1],
+            read.len()
+    );
+
+    println!("\n\nresponse = {:?}", response);
+    println!("Done with the GET file request my guy\r\n\r\n");
+
+    // when i click on the text it simply displays the  text in browser instead of saving it 
+    //and also change how the link works, instead to save it as (index) save as (filename)
+    
     stream.write(response.as_bytes()).unwrap();
+    stream.write(&read[..]).unwrap();
     stream.flush().unwrap();
 }
