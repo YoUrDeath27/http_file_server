@@ -5,3 +5,7 @@ edition = "2021"
 
 [dependencies]
 memchr= "2.7.4"
+percent-encoding = "2.3.1"
+htmlescape = "0.3.1"
+delete = "1.0.1"
+

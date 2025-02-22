@@ -3,7 +3,10 @@ use std::{
     io::{prelude::*, Read, Write},
     net::{TcpListener, TcpStream},
 };
+use percent_encoding::percent_decode_str;
+use htmlescape::decode_html;
 use memchr::memmem;
+use delete::{delete_file};
 
 // use std::thread;
 use std::time::Duration;
@@ -35,7 +38,7 @@ fn handle_connection(mut stream: TcpStream) {
         }
 
         received_data.extend_from_slice(&buffer[..bytes_read]);
-        // println!("Request: {}", String::from_utf8_lossy(&received_data[..]));
+        println!("Request: {}", String::from_utf8_lossy(&received_data[..]));
 
         if received_data[..3] == *b"GET" && bytes_read < buffer.len() {
             get_method(stream, received_data);
@@ -62,26 +65,26 @@ fn get_method(mut stream: TcpStream, mut buffer: Vec<u8>) {
         stream.write(response.as_bytes()).unwrap();
         stream.flush().unwrap();
     }
-    else {
-        // (mut stream: TcpStream, mut buffer: Vec<u8>, entries: Vec<String>)
-        send_file(stream, buffer);
-    }
+    // else {
+    //     // (mut stream: TcpStream, mut buffer: Vec<u8>, entries: Vec<String>)
+    //     send_file(stream, buffer);
+    // }
 
     
 }
 
 fn post_method(mut stream: TcpStream, mut buffer: Vec<u8>) {  
 
-    let response = upload_file(buffer);
-
-    println!("responnse = {}", response);
+    if let Some(action) = memmem::find(&buffer[..], b"action=").map(|p| p as usize){
+        post_action(stream, buffer, action);
+    }
+    else {
+        upload_file(stream, buffer);
+    }
     
-    // println!("response in post receive part= {}", response);
-    stream.write(response.as_bytes()).unwrap();
-    stream.flush().unwrap();
 }
 
-fn upload_file(mut buffer: Vec<u8>) -> String {
+fn upload_file(mut stream: TcpStream, mut buffer: Vec<u8>) {
     let buffer = &buffer[..];
     
     // println!("buffer in upload_file={}", String::from_utf8_lossy(&buffer[..]));
@@ -129,7 +132,9 @@ fn upload_file(mut buffer: Vec<u8>) -> String {
 
     println!("\n\nDone with the POST request my guy");
     let response = format!("{}{}", status_line, web());
-    response
+    
+    stream.write(response.as_bytes()).unwrap();
+    stream.flush().unwrap();
 }
 
 fn web() ->  String {
@@ -177,9 +182,20 @@ fn web() ->  String {
     for i in 0..file_names.len(){
         html.push_str(&*format!(
             "<li> 
-               <a href=\"{}\"> {} </a>
+                {}
+                <form action=\"/\" method =\"POST\">
+                    <input type=\"hidden\" name=\"action\" value=\"DELETE\">
+                    <input type=\"hidden\" name=\"filename\" value=\"{}\">
+                    <button type=\"submit\">Delete</button>
+                </form>
+                <form action=\"/\" method =\"POST\">
+                    <input type=\"hidden\" name=\"action\" value=\"DOWNLOAD\">
+                    <input type=\"hidden\" name=\"filename\" value=\"{}\">
+                    <button type=\"submit\">DOWNLOAD</button>
+                </form>
             </li>\n", 
-            i + 1,
+            file_names[i],
+            file_names[i],
             file_names[i]
         ));         
     }
@@ -192,6 +208,109 @@ fn web() ->  String {
     return html
 }
 
+fn post_action(mut stream: TcpStream, mut buffer: Vec<u8>, action: usize){
+    let action = &buffer[action + "action=".len()..];
+
+    let filename = memmem::find(action, b"&").map(|p| p as usize).unwrap();
+    let filename = &action[filename + 1 + "filename=".len()..];
+
+    let filename = percent_decode_str(&*String::from_utf8_lossy(&filename[..]))
+                    .decode_utf8_lossy()
+                    .replace("+", " ");
+
+    if action[..6] == *b"DELETE" {
+        delet(stream, filename);
+    }
+    else {
+        download(stream, filename, buffer);
+        // stream.write(response.as_bytes()).unwrap();
+        // stream.write(&read[..]).unwrap();
+        // stream.flush().unwrap();
+    }
+
+}
+
+fn delet(mut stream: TcpStream, filename: String){
+    let entries = fs::read_dir("uploads").unwrap();
+    let mut file_names = Vec::new();
+
+    let mut delete = 0;
+    for i in entries {
+        let entry = i.unwrap();
+        let file_name = entry.file_name().into_string().unwrap();
+        file_names.push(file_name);
+    }
+
+    for i in 0..file_names.len(){
+        if filename == file_names[i] {
+            delete = i;
+        }
+    }
+
+    delete_file(&*format!("uploads/{}", file_names[delete]) ).unwrap();
+    delete_file(&*format!("data/{}.txt", file_names[delete]) ).unwrap();
+
+    let status_line = "HTTP/1.1 200 OK\r\n";    
+
+    println!("\n\nDone with the POST request my guy");
+    let response = format!("{}{}", status_line, web());
+    stream.write(response.as_bytes()).unwrap();
+    stream.flush().unwrap();
+}
+
+fn download(mut stream: TcpStream, filename: String, buffer: Vec<u8>){
+    let buffer = &buffer[..];
+
+    let entries = fs::read_dir("uploads").unwrap();
+
+    let entries = fs::read_dir("uploads").unwrap();
+    let mut file_names: Vec<String> = Vec::new();
+    for entry in entries {
+        let entry = entry.unwrap();
+        let file_name = entry.file_name().into_string().unwrap();
+        file_names.push(file_name);
+        println!("entry = {:#?}", entry)
+    }
+
+    let mut f = "idk";
+
+    for i in 0..file_names.len() {
+        if filename == file_names[i] {
+            f = &file_names[i];
+        }
+    } 
+
+    let mut file = fs::File::open(format!("uploads/{}", f )).unwrap();
+    let mut data = fs::File::open(format!("data/{}.txt", f )).unwrap();
+
+    println!("{}", format!("uploads/{}", filename));
+    
+
+    // if file == None || data == None {
+    //     panic!("Something went wrong with getting your data");
+    // }
+    
+    let mut read = Vec::new();
+    file.read_to_end(&mut read).unwrap();
+
+    let mut content_type = String::new();
+    data.read_to_string(&mut content_type);
+
+    let status_line = "HTTP/1.1 200 OK\r\n";
+
+    let response = format!("{}{}\r\nContent-Disposition: attachment; filename=\"{}\"\r\nContent-Length: {}\r\n\r\n",
+            status_line, 
+            content_type,
+            decode_html(&filename).unwrap(),
+            read.len()
+            
+    );
+
+    stream.write(response.as_bytes()).unwrap();
+    stream.write(&read[..]).unwrap();
+    stream.flush().unwrap();
+
+}
 
 //this function works fine as it is, DONT U DARE CHANGE SMTH ABT IT
 fn send_file(mut stream: TcpStream, mut buffer: Vec<u8>) {
@@ -216,7 +335,7 @@ fn send_file(mut stream: TcpStream, mut buffer: Vec<u8>) {
     let mut file = fs::File::open(format!("uploads/{}",file_names[index - 1])).unwrap();
     let mut data = fs::File::open(format!("data/{}.txt", file_names[index - 1])).unwrap();
 
-    println!("try = {}", file_names[index - 1]);
+    // println!("try = {}", file_names[index - 1]);
     let mut read = Vec::new();
     file.read_to_end(&mut read).unwrap();
 
@@ -234,7 +353,7 @@ fn send_file(mut stream: TcpStream, mut buffer: Vec<u8>) {
             read.len()
     );
 
-    println!("\n\nresponse = {:?}", response);
+    // println!("\n\nresponse = {:?}", response);
     println!("Done with the GET file request my guy\r\n\r\n");
 
     // when i click on the text it simply displays the  text in browser instead of saving it 
@@ -244,3 +363,5 @@ fn send_file(mut stream: TcpStream, mut buffer: Vec<u8>) {
     stream.write(&read[..]).unwrap();
     stream.flush().unwrap();
 }
+
+
