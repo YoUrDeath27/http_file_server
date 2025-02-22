@@ -1,6 +1,6 @@
 /target
 /data
-/uploads
+/uploads/*
 /src/post request.txt
 /src/get request.txt
 
