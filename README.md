@@ -13,6 +13,7 @@ in the future im planning to implement:
   - multi-threading
   - rename file function
   - better UI (styling)
-  - folders (its a good idea, looking forward to it)
+  - folders (kinda done)
+        -but nested folders (folder> folder> file) dont work atm, gotta work on that
 
     
