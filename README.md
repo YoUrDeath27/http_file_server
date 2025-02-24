@@ -13,7 +13,6 @@ in the future im planning to implement:
   - multi-threading
   - rename file function
   - better UI (styling)
-  - folders (kinda done)
-        -but nested folders (folder> folder> file) dont work atm, gotta work on that
-  -make so that when u do a GET/{folder} to make u enter that folder and view its contents, and somewhere up to get u back at root (/)
+  - folders (kinda done)   -but nested folders (folder> folder> file) dont work atm, gotta work on that
+  - make so that when u do a GET/{folder} to make u enter that folder and view its contents, and somewhere up to get u back at root (/)
     
