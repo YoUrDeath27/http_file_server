@@ -24,18 +24,50 @@ const ALLOWED_MIME_TYPES: &[&str] = &[
     "application/pdf",
     "application/octet-stream"
 ]; // idk how this works
+
+
 fn main() {
-    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+
+    let mut port = String::new();
+
+    println!("Choose on which ip the server to listen to \n(e.g. 127.0.0.1:7878)");
+    println!("ps: press enter to go with the default");
+    std::io::stdin()
+                .read_line(&mut port)
+                .expect("U are one son of a bitch");
+
+            
+        // Trim whitespace and newlines from the input
+    let port = port.trim();
+
+    println!("port? {port:?}");
+
+    // Use a default address if the input is empty
+    let port = if port == "" {
+        println!("No input provided. Using default address: 127.0.0.1:7878");
+        "127.0.0.1:7878"
+    } else {
+        port
+    };
+    println!("The address you selected is: {:?}", port);
+
+
+    let listener = match TcpListener::bind(port){
+        Ok(p) => p,
+        Err(err) => {
+            println!("Could not bind to {} : {}", port, err);
+            println!("Ensure the port is clear to be used");
+            return;
+        }
+    };
     fs::create_dir_all("uploads").unwrap(); // Create uploads directory
     fs::create_dir_all("data").unwrap();
-    // fs::create_dir_all("uploads/anime/sigma/skibidy").unwrap();
-    // fs::File::create("uploads/anime/sigma/skibidy/test.txt").unwrap();
+
     for stream in listener.incoming() {
         let stream = stream.unwrap();
         // println!("stream1 = {:?}", stream);
         handle_connection(stream);
     }
-    println!("idfk what happens here");
 }
 
 fn handle_connection(mut stream: TcpStream) {
@@ -64,10 +96,10 @@ fn handle_connection(mut stream: TcpStream) {
         }
 
         received_data.extend_from_slice(&buffer[..bytes_read]);
-        println!("Request: {}", String::from_utf8_lossy(&received_data[..]));
+        // println!("Request: {}", String::from_utf8_lossy(&received_data[..]));
 
         if received_data[..3] == *b"GET" && bytes_read < buffer.len() {
-            get_method(stream, received_data);
+            get_method(stream);
             break;
         }
         if received_data[..4] == *b"POST" && bytes_read < buffer.len() {
@@ -77,13 +109,13 @@ fn handle_connection(mut stream: TcpStream) {
     }
 }
 
-fn get_method(mut stream: TcpStream, mut buffer: Vec<u8>) {
+fn get_method(mut stream: TcpStream) {
     let status_line = "HTTP/1.1 200 OK\r\n";
 
     println!("Done with the GET request my guy");
 
     let response = format!("{}{}", status_line, web());
-    println!("{}", response);
+    // println!("{}", response);
     if let Err(e) = stream.write_all(response.as_bytes()){
         eprintln!("Write error: {}", e);
     }
@@ -94,7 +126,7 @@ fn get_method(mut stream: TcpStream, mut buffer: Vec<u8>) {
     
 }
 
-fn post_method(mut stream: TcpStream, mut buffer: Vec<u8>) {  
+fn post_method(stream: TcpStream, buffer: Vec<u8>) {  
 
     if let Some(action) = memmem::find(&buffer[..], b"action=").map(|p| p as usize){
         post_action(stream, buffer, action);
@@ -105,7 +137,7 @@ fn post_method(mut stream: TcpStream, mut buffer: Vec<u8>) {
     
 }
 
-fn upload_file(mut stream: TcpStream, mut buffer: Vec<u8>) {    
+fn upload_file(mut stream: TcpStream, buffer: Vec<u8>) {    
     // println!("buffer in upload_file={}", String::from_utf8_lossy(&buffer[..]));
 
     let boundary = match get_boundary(&buffer) {
@@ -130,12 +162,12 @@ fn upload_file(mut stream: TcpStream, mut buffer: Vec<u8>) {
     };
 
     if !ALLOWED_MIME_TYPES.contains(&content_type) {
-        println!("sontent_type ={}", content_type);
+        // println!("sontent_type ={}", content_type);
         send_error_response(&mut stream, 400, "Unsuported file type");
         return;
     }
 
-    if let Some(folder) = memmem::find(buffer, b"name=folder").map(|p| p as usize) {
+    if let Some(_) = memmem::find(buffer, b"name=\"folder\"").map(|p| p as usize) {
         add_file_in_folder(stream, buffer, content, content_type, filename);
         return;
     }
@@ -156,7 +188,7 @@ fn get_boundary(buffer: &Vec<u8>) -> Option<Vec<u8>>{
 }
 
 fn parse_file<'a>(stream: &mut TcpStream, buffer:&'a [u8], boundary: &[u8]) -> Result<(&'a [u8], &'a str, String), &'static str>{    
-    let mut content_boundary = match memmem::find_iter(buffer, &boundary).map(|p| p as usize).next(){
+    let content_boundary = match memmem::find_iter(buffer, &boundary).map(|p| p as usize).next(){
         Some(c) => c,
         None => {
             send_error_response(stream, 400, "Content not found");
@@ -184,6 +216,8 @@ fn parse_file<'a>(stream: &mut TcpStream, buffer:&'a [u8], boundary: &[u8]) -> R
     let mut content_type = memmem::find_iter(buffer, b"Content-Type:").map(|p| p as usize);
     let _ = content_type.next();
 
+    // println!("buffer = {}", String::from_utf8_lossy(&buffer[..]));
+
     if let Some(_) = memmem::find(buffer, b"name=\"folder\"").map(|p| p as usize) {
 
         let content_type = content_type.next().unwrap();
@@ -197,7 +231,7 @@ fn parse_file<'a>(stream: &mut TcpStream, buffer:&'a [u8], boundary: &[u8]) -> R
 
         //2 
 
-        println!("Content-Type = {}", String::from_utf8_lossy(&content_type[..]));
+        // println!("Content-Type = {}", String::from_utf8_lossy(&content_type[..]));
 
         //filename part
         let filename = memmem::find_iter(info, b"filename=").map(|p| p as usize).next().unwrap();
@@ -211,14 +245,12 @@ fn parse_file<'a>(stream: &mut TcpStream, buffer:&'a [u8], boundary: &[u8]) -> R
         // println!("filename = {:?}", String::from_utf8_lossy(&filename[..]));
         let file = String::from_utf8_lossy(&filename[..]).to_string();
         
-        
         return Ok((
             content, 
             std::str::from_utf8(content_type).unwrap_or("application/octet-stream"),
             file
         ));
     }
-    
     let content_type = content_type.next().unwrap();
     let content_type = &buffer[content_type + "Content-Type:\"".len()..];
 
@@ -253,7 +285,7 @@ fn parse_file<'a>(stream: &mut TcpStream, buffer:&'a [u8], boundary: &[u8]) -> R
     
 }
 
-fn post_action(mut stream: TcpStream, mut buffer: Vec<u8>, action: usize){
+fn post_action(stream: TcpStream, buffer: Vec<u8>, action: usize){
     let action = &buffer[action + "action=".len()..];
 
     let filename = memmem::find(action, b"filename=").map(|p| p as usize).unwrap();
@@ -263,7 +295,7 @@ fn post_action(mut stream: TcpStream, mut buffer: Vec<u8>, action: usize){
                     .decode_utf8_lossy()
                     .replace("+", " ");
 
-    println!("\n1action ={}", String::from_utf8_lossy(&action[..10]));
+    // println!("\n1action ={}", String::from_utf8_lossy(&action[..10]));
 
     if action[..6] == *b"DELETE" {
         println!("Deleted something");
@@ -273,7 +305,7 @@ fn post_action(mut stream: TcpStream, mut buffer: Vec<u8>, action: usize){
         add_folder(stream, &buffer[..], filename); // implement this 
     } else if action[..8] == *b"DOWNLOAD" {
         println!("Downloaded a file");
-        download(stream, filename, buffer);
+        download(stream, filename);
     }   
 
     // println!("did one of the requests");
@@ -284,44 +316,58 @@ fn delet(mut stream: TcpStream, filename: String, buffer: Vec<u8>){
     let entries = fs::read_dir("uploads").unwrap();
     let mut file_names = Vec::new();
 
-    let mut delete = 0;
     for i in entries {
         let entry = i.unwrap();
         let file_name = entry.file_name().into_string().unwrap();
         file_names.push(file_name);
     }
 
-    // for i in 0..file_names.len(){
-    //     if filename == file_names[i] {
-    //         delete = i;
-    //     }
-    // }
-
-    println!("\nfile? {}", filename);
+    // println!("\nfile? {}", filename);
     // println!("file = {}", file_names[delete]); //action=DELETE&filename=anime%2Ftest.txt
 
+    // println!("\n\nbuffer={}", String::from_utf8_lossy(&buffer[..]));
     if let Some(folder) = memmem::find(&buffer[..], b"folder=") {
+
         let file = memmem::find(&buffer[..], b"filename=").map(|p| p as usize).unwrap();
         let file = &buffer[file + "filename=".len()..];
         let filename = String::from_utf8_lossy(&file[..]);
-        println!("folder ={}", filename);
-        delete_folder(&*format!("uploads/{}", filename) ).unwrap();
-        delete_folder(&*format!("data/{}", filename) ).unwrap();
-    } else {
-        delete_file(&*format!("uploads/{}", filename) ).unwrap();
-        delete_file(&*format!("data/{}.txt", filename) ).unwrap();
+        let filename = decode_html(&*filename)
+                .unwrap()
+                .replace("+", " ");
+
+        fs::remove_dir_all(&*format!("uploads/{}", filename));
+        fs::remove_dir_all(&*format!("data/{}", filename));
+
+    } else { // a folder to delete
+        // let filename = decode_html(&*filename).unwrap();
+        match delete_file(&*format!("uploads/{}", filename) ){
+            Ok(ok) => ok,
+            Err(err) => {
+                println!("error = {}", err);
+                send_error_response(&mut stream, 401, &*format!("(uploads)Unable to delete folder because\r\n {}", err));
+                return;
+            }
+        }
+        match delete_file(&*format!("data/{}.txt", filename) ){
+            Ok(ok) => ok,
+            Err(err) => {
+                println!("error = {}", err);
+                send_error_response(&mut stream, 401, &*format!("(data)Unable to delete folder because\r\n{}", err));
+                return;
+            }
+        };
+
     }
 
     let status_line = "HTTP/1.1 200 OK\r\n";    
 
-    println!("\n\nDone with the POST request my guy");
+    println!("\n\nDone with the POST delete action request my guy");
     let response = format!("{}{}", status_line, web());
     stream.write(response.as_bytes()).unwrap();
     stream.flush().unwrap();
 }
 
-fn download(mut stream: TcpStream, filename: String, buffer: Vec<u8>){
-    let buffer = &buffer[..];
+fn download(mut stream: TcpStream, filename: String){
 
     let entries = fs::read_dir("uploads").unwrap();
     let mut file_names: Vec<String> = Vec::new();
@@ -329,13 +375,12 @@ fn download(mut stream: TcpStream, filename: String, buffer: Vec<u8>){
         let entry = entry.unwrap();
         let file_name = entry.file_name().into_string().unwrap();
         file_names.push(file_name);
-        println!("entry = {:#?}", entry)
     }
 
     let mut file = fs::File::open(format!("uploads/{}", filename )).unwrap();
     let mut data = fs::File::open(format!("data/{}.txt", filename )).unwrap();
 
-    println!("{}", format!("uploads/{}", filename));
+    println!("{}", format!("download uploads/{}", filename));
     
     let mut read = Vec::new();
     file.read_to_end(&mut read).unwrap();
@@ -345,12 +390,12 @@ fn download(mut stream: TcpStream, filename: String, buffer: Vec<u8>){
 
     let status_line = "HTTP/1.1 200 OK\r\n";
 
-    println!("filename={}", decode_html(&filename).unwrap());
+    // println!("filename={}", decode_html(&filename).unwrap());
 
     let start = memmem::find(filename.as_bytes(), b"/").map(|p| p as usize).unwrap();
     let filename = String::from_utf8_lossy(&filename.as_bytes()[start + 1..]);
 
-    println!("filename={}", filename);
+    // println!("filename={}", filename);
     let response = format!("{}{}\r\nContent-Disposition: attachment; filename=\"{}\"\r\nContent-Length: {}\r\n\r\n",
             status_line, 
             content_type,
@@ -359,6 +404,7 @@ fn download(mut stream: TcpStream, filename: String, buffer: Vec<u8>){
             
     );
     
+    println!("Done with the POST download action my guy");
     stream.write(response.as_bytes()).unwrap();
     stream.write(&read[..]).unwrap();
     stream.flush().unwrap();
@@ -369,11 +415,13 @@ fn add_folder(mut stream: TcpStream, buffer: &[u8], filename: String) {
 
     if let Some(nested) = memmem::find(buffer, b"nested=").map(|p| p as usize) {
         let nested = &buffer[nested + 7..];
+        println!("nested?: {}", String::from_utf8_lossy(&nested[..]));
         let end = memmem::find(nested, b"&").map(|p| p as usize).unwrap();
         let nested =&nested[..end];
 
         let filename = format!("{}/{}", String::from_utf8_lossy(&nested[..]), filename);   
         fs::create_dir_all(format!("uploads/{}", filename)).unwrap();
+        fs::create_dir_all(format!("data/{}", filename)).unwrap();
 
         println!("uploads/{}\n\n", filename);
         let status_line = "HTTP/1.1 200 OK\r\n";
@@ -385,7 +433,10 @@ fn add_folder(mut stream: TcpStream, buffer: &[u8], filename: String) {
         return;
     };
 
+
     fs::create_dir_all(format!("uploads/{}", filename)).unwrap();
+    fs::create_dir_all(format!("data/{}", filename)).unwrap();
+    
 
     println!("uploads/{}\n\n", filename);
     let status_line = "HTTP/1.1 200 OK\r\n";
@@ -397,32 +448,32 @@ fn add_folder(mut stream: TcpStream, buffer: &[u8], filename: String) {
 
 fn add_file_in_folder(mut stream:TcpStream, buffer: &[u8], content: &[u8], content_type: &str, filename: String) {
 
-    //in the future u can make a loop in case its nested on a deeper level
-    // find_iter #hint
-    // if let Some(folder) = folder.next(){
-    //      //here is the logic to add to the filename the trailing folders 
-    //}
-    // otherwise it should simply add the filename and add it on the server
-
-    let folder = match memmem::find(&buffer[..], b"name=folder").map(|p| p as usize) {
+    let folder = match memmem::find(&buffer[..], b"name=\"folder\"").map(|p| p as usize) {
         Some(f) => f,
         None => {
             send_error_response(&mut stream, 404, "Folder not found");
             return;
         }
     };
-    let folder = &buffer[folder + 13..];
+
+    println!("should add a file in da folder");
+    let folder = &buffer[folder + "name=\"folder\"".len() + "\r\n\r\n".len()..];
+
+    println!("folder? = {}", String::from_utf8_lossy(&folder[..]));
     let end = memmem::find(folder, b"\r\n").map(|p| p as usize).unwrap();
     let folder = &folder[..end];
 
-    println!("filename before change = {}", filename);
+
+    // println!("filename before change = {}", filename);
 
     let filename = format!("{}/{}", 
         String::from_utf8_lossy(&folder[..]),
         filename
     );
 
-    println!("filename after change = {}", filename);
+    // println!("filename after change = {}", filename);
+
+    add_file(stream, buffer, content, content_type, filename);
 
 }
 
@@ -430,12 +481,13 @@ fn add_file(mut stream: TcpStream, buffer: &[u8], content: &[u8], content_type: 
     // do some shady shit
 
         let filename_upload = format!("uploads/{}", filename);
-        println!("upload ={}", filename_upload);
+        // println!("upload filename ={}", filename_upload);
 
         let mut file = fs::File::create(&filename_upload).unwrap();
         file.write_all(content);
         
         let filename_data = format!("data/{}",filename);
+        // println!("filename_data = {}", filename_data);
         let mut file2 = fs::File::create(format!("{}.txt", &filename_data)).unwrap();
     
         file2.write_all(&format!("Content-Type:{}",content_type).into_bytes()[..]);//idk how this works
@@ -443,7 +495,7 @@ fn add_file(mut stream: TcpStream, buffer: &[u8], content: &[u8], content_type: 
         
         let status_line = "HTTP/1.1 200 OK\r\n";    
     
-        println!("\n\nDone with the POST request my guy");
+        println!("\n\nDone with the POST add_file request my guy");
         let response = format!("{}{}", status_line, web());
         
         stream.write(response.as_bytes()).unwrap();
@@ -463,69 +515,77 @@ fn web() ->  String {
     }
 
     let mut html = String::from("    
-<!DOCTYPE html>
-<html lang=\"en\">
-<head>
-<meta charset=\"UTF-8\">
-<title>File Upload</title>
-</head>
+    <!DOCTYPE html>
+    <html lang=\"en\">
+    <head>
+    <meta charset=\"UTF-8\">
+    <title>File Upload</title>
+    </head>
 
-<style>
-    li{
-        display: flex;
-        padding: 10px;
-    }
+    <style>
+        li{
+            display: flex;
+            padding: 10px;
+        }
 
 
-    li > form > button{
-        margin: 0 10px;
-    }
-</style>
+        li > form > button{
+            margin: 0 10px;
+        }
 
-<body>
-<h1>Hello!</h1>
-<p>Hi from Rust</p>
-<h1>POST REQUEST DONE</h1>
+        li > div:nth-child(2) {
+            margin:0 0 0 50px;
+        }
+    </style>
 
-<form action=\"/\" method=\"POST\" enctype=\"multipart/form-data\">
-    <input type=\"file\" name=\"file\" required>
-    <button type=\"submit\">Upload</button>
-</form>
+    <body>
+    <h1>Hello!</h1>
+    <p>Welcome to your file server :)</p>
 
-<form action\"/\" method=\"POST\">
-    <input type=\"hidden\" name=\"action\" value=\"ADD_FOLDER\">
-    <input type=\"text\" name=\"filename\" required>
-    <button type=\"submit\">Add Folder </button>
-</form>
+    <form action=\"/\" method=\"POST\" enctype=\"multipart/form-data\">
+        <input type=\"file\" name=\"file\" id=\"fileInput\" required>
+        <button>
+            <label for=\"fileInput\" id=\"fileLabel\">Choose a file</label>
+        </button>
+        <button type=\"submit\">Upload</button>
+    </form>
 
-<h2> Saved Files:</h2>
-<ul>");
+    <form action\"/\" method=\"POST\">
+        <input type=\"hidden\" name=\"action\" value=\"ADD_FOLDER\">
+        <input type=\"text\" name=\"filename\" required>
+        <button type=\"submit\">Add Folder </button>
+    </form>
+
+    <h2> Saved Files:</h2>
+    <ul>");
     
     for i in 0..file_names.len(){
         if !files[i].is_file() {
             html.push_str(&*format!(
                 "<li> 
-                    {}
-                    <form action=\"/\" method =\"POST\">
-                        <input type=\"hidden\" name=\"action\" value=\"DELETE\">
-                        <input type=\"hidden\" name=\"folder\" value=\"{}\">
-                        <input type=\"hidden\" name=\"filename\" value=\"{}\">
-                        <button type=\"submit\">Delete</button>
-                    </form>
-                <br>
-                    <form action=\"/\" method=\"POST\" enctype=\"multipart/form-data\">
-                        <input type=\"hidden\" name=\"folder\" value=\"{}\">
-                        <input type=\"file\" name=\"file\" required>
-                        <button type=\"submit\">Upload</button>
-                    </form>
-                    {} files inside
-                    <br>
-                    <form action\"/\" method=\"POST\">
-                        <input type=\"hidden\" name=\"action\" value=\"ADD_FOLDER\">
-                        <input type=\"hidden\" name=\"nested\" value=\"{}\">
-                        <input type=\"text\" name=\"filename\" required>
-                        <button type=\"submit\">Add Folder </button>
-                    </form>
+                    <div>
+                        {}
+                    </div>    
+                    <div>
+                        <form action=\"/\" method =\"POST\">
+                            <input type=\"hidden\" name=\"action\" value=\"DELETE\">
+                            <input type=\"hidden\" name=\"folder\" value=\"{}\">
+                            <input type=\"hidden\" name=\"filename\" value=\"{}\">
+                            <button type=\"submit\">Delete</button>
+                        </form>
+                        <form action=\"/\" method=\"POST\" enctype=\"multipart/form-data\">
+                            <input type=\"hidden\" name=\"folder\" value=\"{}\">
+                            <input type=\"file\" name=\"file\" required>
+                            <button type=\"submit\">Upload</button>
+                        </form>
+                        {} files inside
+                        <form action\"/\" method=\"POST\">
+                            <input type=\"hidden\" name=\"action\" value=\"ADD_FOLDER\">
+                            <input type=\"hidden\" name=\"nested\" value=\"{}\">
+                            <input type=\"text\" name=\"filename\" required>
+                            <button type=\"submit\">Add Folder </button>
+                        </form>
+                    </div>
                 </li>\n", 
                 file_names[i],
                 file_names[i],
@@ -533,7 +593,7 @@ fn web() ->  String {
                 file_names[i],
                 {
                     let mut list = Vec::new();
-                    println!("uploads/{}", file_names[i]);
+                    // println!("uploads/{}", file_names[i]);
                     let entryes = fs::read_dir(format!("uploads/{}", file_names[i])).unwrap();
                     for entry in entryes {
                         let entry = entry.unwrap();
@@ -620,7 +680,7 @@ fn send_error_response(stream: &mut TcpStream, code: u16, message: &str) {
     };
 
     let response = format!("{}\r\n\r\n{}", status_line, error_web(message));
-    println!("reponse =\n{}", response);
+    // println!("reponse =\n{}", response);
     let _ = stream.write_all(response.as_bytes());
     let _ = stream.flush();
 }
