@@ -9,11 +9,17 @@ use std::{
     io::{prelude::*, Read, Write},
     net::{TcpListener, TcpStream},
 };
+
 use mongodb::{
     sync::Client,
     options::ClientOptions
 };
-use bson::doc;
+use bson::{
+    doc,
+    to_document,
+    Document
+};
+
 use lazy_static::lazy_static;
 use zip::write::SimpleFileOptions;
 use walkdir::WalkDir;
@@ -38,12 +44,41 @@ const ALLOWED_MIME_TYPES: &[&str] = &[
     "application/octet-stream",
 ]; // idk how this works
 
+#[derive(Debug, Serialize, Deserialize)]
+struct FileMetadata {
+    name: String,
+    path: String,
+    size: u64,
+    mime_type: String,
+    created_at: DateTime<Utc>,
+    modified_at: DateTime<Utc>,
+}
+// Convert FileMetadata to BSON document
+impl From<FileMetadata> for bson::Document {
+    fn from(metadata: FileMetadata) -> Self {
+        bson::to_document(&metadata).expect("Failed to serialize metadata")
+    }
+}
 
 lazy_static!{
     static ref SHOW_FOLDER: Mutex<String> = Mutex::new(String::from(""));
 }
+//----------------------------------------------------------------------
+//no clue what this does but here we go
+//02.03.2025 15:46
+
+fn create_indexes() {
+    let collection = metadata_collection();
+    let index = mongodb::IndexModel::builder()
+        .keys(doc! { "path": 1 })
+        .build();
+    
+    collection.create_index(index, None) 
+        .expect("Failed to create index");
+}
 
 fn main() {
+    create_indexes();
     let mut port = String::new();
 
     println!("Choose on which ip the server to listen to \n(e.g. 127.0.0.1:7878)");
@@ -80,6 +115,17 @@ fn main() {
         // println!("stream1 = {:?}", stream);
         handle_connection(stream);
     }
+}
+
+fn get_db() -> mongodb::sync::Database {
+    let client = Client::with_uri_str("mongodb://localhost:27017")
+        .expect("Failed to connect to MongoDB");
+    client.database("file_server")
+}
+
+// Collection for metadata
+fn metadata_collection() -> mongodb::sync::Collection<Document> {
+    get_db().collection("folders")
 }
 
 fn handle_connection(mut stream: TcpStream) {
@@ -558,6 +604,13 @@ fn delet(mut stream: TcpStream, filename: String, buffer: Vec<u8>) {
                 println!("deleting file={}", filename);
                 fs::remove_file(&*format!("uploads/{}/{}", folder1, filename)); //dont u dare change this shi
                 fs::remove_file(&*format!("data/{}/{}", folder1, filename));
+
+                let filter = doc! {"path": format!("uploads/{}/{}", folder1, filename)};
+                metadata_collection().delete_one(filter, None)
+                        .expect({
+                            send_error_response(&mut stream, 403, "Failed to delete the file");
+                            return;
+                        })
             }
         } else {
             let entries = fs::read_dir("uploads").unwrap();
@@ -598,6 +651,13 @@ fn delet(mut stream: TcpStream, filename: String, buffer: Vec<u8>) {
                 println!("deleting file={}", filename);
                 fs::remove_file(&*format!("uploads/{}", filename)); //dont u dare change this shi
                 fs::remove_file(&*format!("data/{}.txt", filename));
+
+                let filter = doc! {"path": format!("uploads/{}", filename)};
+                metadata_collection().delete_one(filter, None)
+                        .expect({
+                            send_error_response(&mut stream, 403, "Failed to delete the file");
+                            return;
+                        })
             }
         }
         
@@ -770,6 +830,18 @@ fn add_file(
             println!("filename_data = {}", filename_data);
             let mut file2 = fs::File::create(&filename_data).unwrap();
 
+            let metadata = FileMetadata{
+                name: filename,
+                path: format!("uploads/{}/{}", folder, filename),
+                size: content.len() as u64,
+                mime_type: content_type.to_string(),
+                created_at: Utc::now(),
+                modified_at: Utc::now(),
+            };
+
+            let doc = bson::to_document(&metadata)?;  // Convert to BSON
+            metadata_collection().insert_one(doc, None)?;  // Keep 2 arguments
+
             file2.write_all(&format!("Content-Type:{}", content_type).into_bytes()[..]); //idk how this works
                                                                                         //till here we saved the file on the server (hopefully)
 
@@ -785,11 +857,25 @@ fn add_file(
             println!("filename_data = {}", filename_data);
             let mut file2 = fs::File::create(&filename_data).unwrap();
 
+            let metadata = FileMetadata{
+                name: filename,
+                path: format!("uploads/{}/", folder),
+                size: content.len() as u64,
+                mime_type: content_type.to_string(),
+                created_at: Utc::now(),
+                modified_at: Utc::now(),
+            };
+
+            let doc = bson::to_document(&metadata)?;  // Convert to BSON
+            metadata_collection().insert_one(doc, None)?;  // Keep 2 arguments
+
             file2.write_all(&format!("Content-Type:{}", content_type).into_bytes()[..]); //idk how this works
                                                                                         //till here we saved the file on the server (hopefully)
         }
     }
 
+    
+    
     let status_line = "HTTP/1.1 200 OK\r\n";
 
     println!("\n\nDone with the POST add_file request my guy");

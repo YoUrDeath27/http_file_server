@@ -16,4 +16,4 @@ walkdir = "2.5"  # For recursive directory traversal
 mongodb = { version = "3.2.1", features = ["sync"] }  # Blocking API
 bson = "2.8.0"              # BSON serialization
 serde = { version = "1.0", features = ["derive"] } 
-chrono = "0.4"              # Timestamps
+chrono = { version = "0.4", features = ["serde"] }              # Timestamps
