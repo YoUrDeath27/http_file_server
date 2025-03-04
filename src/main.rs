@@ -9,16 +9,10 @@ use std::{
     io::{prelude::*, Read, Write},
     net::{TcpListener, TcpStream},
 };
-use mongodb::{
-    sync::Client,
-    options::ClientOptions
-};
-use bson::doc;
+
 use lazy_static::lazy_static;
 use zip::write::SimpleFileOptions;
 use walkdir::WalkDir;
-use chrono::{DateTime, Utc};
-use serde::{Serialize, Deserialize};
 
 
 // use std::thread;
@@ -108,7 +102,7 @@ fn handle_connection(mut stream: TcpStream) {
         }
 
         received_data.extend_from_slice(&buffer[..bytes_read]);
-        // println!("Request: {}", String::from_utf8_lossy(&received_data[..]));
+        println!("Request: {}", String::from_utf8_lossy(&received_data[..]));
 
         if received_data[..3] == *b"GET" && bytes_read < buffer.len() {
             get_method(stream, received_data);
@@ -123,17 +117,36 @@ fn handle_connection(mut stream: TcpStream) {
 
 fn get_method(mut stream: TcpStream, buffer: Vec<u8>) {
     let buffer = &buffer[..];
-                              
-    if buffer[..6] == *b"GET / " {
+
+    let connected = if let Some(_) = memmem::find(&buffer[..], b"Cookie: Auth").map(|p| p as usize) {
+        true
+    }   else {
+        false
+    };
+
+    println!("connected ={:?}", connected);
+
+
+    if connected == false {
+        let status_line =  "HTTP/1.1 200 OK\r\n";
+        let response = format!("{}{}",status_line, login_signup());
+
+        stream.write(response.as_bytes()).unwrap();
+        stream.flush().unwrap();
+    }else if buffer[..6] == *b"GET / "{
         let status_line = "HTTP/1.1 200 OK\r\n";
 
         {
             let mut folder = SHOW_FOLDER.lock().unwrap();
-            *folder = String::from("");
+            let user = memmem::find(buffer, b"Cookie: Auth=\"user-").map(|p| p as usize).unwrap();
+            let end = memmem::find(buffer, b"-token").map(|p| p as usize).unwrap();
+            let user = &buffer[user + "Cookie: Auth=\"user-".len() ..end];
+            *folder = String::from_utf8_lossy(&user[..]).to_string(); //wtffffffff
         }
         println!("Done with the normal GET request my guy");
 
-        let response = format!("{}{}", status_line, web());
+        let response = format!("{}{}", status_line, web(&buffer[..]));
+
         // println!("{}", response);
         if let Err(e) = stream.write_all(response.as_bytes()) {
             eprintln!("Write error: {}", e);
@@ -166,7 +179,8 @@ fn get_method(mut stream: TcpStream, buffer: Vec<u8>) {
 
         println!("Done with the GET request my guy");
     
-        let response = format!("{}{}", status_line, web());
+        let response = format!("{}{}", status_line, web(&buffer[..]));
+        
         // println!("should get a response?");
         // println!("{}", response);
         if let Err(e) = stream.write_all(response.as_bytes()) {
@@ -180,12 +194,119 @@ fn get_method(mut stream: TcpStream, buffer: Vec<u8>) {
     
 }
 
-fn post_method(stream: TcpStream, buffer: Vec<u8>) {
+fn post_method(mut stream: TcpStream, buffer: Vec<u8>) {
     if let Some(action) = memmem::find(&buffer[..], b"action=").map(|p| p as usize) {
         post_action(stream, buffer, action);
+    } else if let Some(_) = memmem::find(&buffer[..], b"account=").map(|p| p as usize){
+        auth_user(stream, buffer);
+    } else if let Some(_) = memmem::find(&buffer[..], b"password=").map(|p| p as usize) {
+        auth_pass(stream, buffer);
     } else {
         upload_file(stream, buffer);
     }
+}
+
+fn auth_user(mut stream: TcpStream, buffer: Vec<u8>) {
+    let name = memmem::find(&buffer[..], b"account=").map(|p| p as usize).unwrap();
+    let name = &buffer[name + "account=".len()..];
+    let name = String::from_utf8_lossy(&name[..]);
+
+    let status_line = "HTTP/1.1 200 OK\r\n";
+    let response = format!("{}{}", status_line, password(name.to_string(), None::<usize>));//dont ask homie
+
+    stream.write(response.as_bytes()).unwrap();
+    stream.flush().unwrap();
+}
+
+fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
+    let user = memmem::find(&buffer[..], b"user=").map(|p| p as usize).unwrap();
+    let user = &buffer[user + "user=".len()..];
+    let end = memmem::find(&user[..], b"&").map(|p| p as usize).unwrap();
+    let user = &user[..end];
+
+    let user = String::from_utf8_lossy(&user[..]);
+
+    let pass = memmem::find(&buffer[..], b"password=").map(|p| p as usize).unwrap();
+    let pass = &buffer[pass + "password=".len()..];
+    let pass = String::from_utf8_lossy(&pass[..]);
+
+    let mut file = match fs::File::open("users.txt") {
+        Ok(c) => c,
+        Err(_) => fs::File::create_new("users.txt").unwrap(),
+    };
+    let mut text = Vec::new();
+
+    file.read_to_end(&mut text);
+
+    let search = format!("{}: {} ",user, pass);
+    let search = search.as_bytes();
+
+
+    println!("text in da file ={:?}", text);
+    println!("text in string form = {}", String::from_utf8_lossy(&text[..]));
+    println!("user = {:?}", user);
+    println!("pass = {:?}", pass);
+    println!("search = {:?}", String::from_utf8_lossy(&search[..]));
+    println!("\n\n\n\n\n");
+    
+
+    // check if the person is in the file 
+    // else add user and pass
+    // but if user is but pass isnt
+    // make the user retry pass
+    
+    match memmem::find(&text[..], user.as_bytes()).map(|p| p as usize){
+        Some(_) => (()),
+        None => {
+            let _ = file.write_all(search).unwrap(); //access is denied????
+            //solve this tmrw 04 03 2025 
+            ()
+        }, //do some shit
+        //add user with pass
+    } 
+    if let Some(user_found) = memmem::find(&text[..], user.as_bytes()).map(|p| p as usize){
+        //check if user and pass match
+        let search_boundary = &text[user_found..];
+        let mut end = memmem::find_iter(&search_boundary, " ").map(|p| p as usize);
+        end.next(); 
+        let search_boundary = &search_boundary[..end.next().unwrap()];
+
+        println!("search_boundary = {:?}", String::from_utf8_lossy(&search_boundary[..])); 
+        if !(search_boundary == search) {
+            let status_line =  "HTTP/1.1 200 OK\r\n";
+            let response = format!("{}{}",status_line, password(user.to_string(), Some("try to remember the password u used when creating this account".to_string())));
+    
+            stream.write(response.as_bytes()).unwrap();
+            stream.flush().unwrap();
+        } 
+        //if they match do nothing
+        //else send response of pass again and tell the user to try again till it matches
+    } 
+    
+    //if the user and pass match show the corresponding 
+
+
+    {
+        let mut folder = SHOW_FOLDER.lock().unwrap();
+        *folder = (&user).to_string(); 
+        println!("folder ={}", *folder);
+        // fs::read_dir(format!("uploads/{}", *folder)).unwrap();
+        match fs::read_dir(format!("uploads/{}", *folder)) {
+            Err(_) => {
+                fs::create_dir_all(format!("uploads/{}", folder));
+                fs::create_dir_all(format!("data/{}", folder));
+            }
+            _ => println!("everything is allright"),
+        }
+    }
+
+    
+
+    let status_line = "HTTP/1.1 200 OK\r\n";
+    let response = format!("{}Set-Cookie: Auth=\"user-{}-token\"; Path=/; HttpOnly; SameSite=Strict; Max-Age=3600\r\nLocation: /\r\n{}", status_line, user, web(&buffer[..]));
+
+    stream.write(response.as_bytes()).unwrap();
+    stream.flush().unwrap();
 }
 
 fn upload_file(mut stream: TcpStream, buffer: Vec<u8>) {
@@ -399,7 +520,7 @@ fn post_action(mut stream: TcpStream, buffer: Vec<u8>, action: usize) {
                 .replace("+", " ");
         println!("new:{}", new_filename);
 
-        rename_folder(stream, filename, new_filename);
+        rename_folder(stream, buffer, filename, new_filename);
     } else if action[..] == *b"DOWNLOAD_FOLDER" {
         println!("Downloading folder as ZIP");
         download_folder(stream, filename);
@@ -503,7 +624,7 @@ fn zip_folder(folder_path: &Path, zip_path: &Path) -> Result<(), Box<dyn std::er
     Ok(())
 }
 
-fn rename_folder(mut stream: TcpStream, old_folder: String, new_folder: String) {
+fn rename_folder(mut stream: TcpStream, buffer: Vec<u8>, old_folder: String, new_folder: String) {
     {
         let folder = SHOW_FOLDER.lock().unwrap();
         if *folder != "" {
@@ -523,7 +644,7 @@ fn rename_folder(mut stream: TcpStream, old_folder: String, new_folder: String) 
 
     println!("\n\nDone with the POST RENAME_FOLDER action request my guy");
 
-    let response = format!("{}{}", status_line, web());
+    let response = format!("{}{}", status_line, web(&buffer[..]));
     stream.write(response.as_bytes()).unwrap();
     stream.flush().unwrap();
 }
@@ -606,7 +727,7 @@ fn delet(mut stream: TcpStream, filename: String, buffer: Vec<u8>) {
     let status_line = "HTTP/1.1 200 OK\r\n";
 
     println!("\n\nDone with the POST delete action request my guy");
-    let response = format!("{}{}", status_line, web());
+    let response = format!("{}{}", status_line, web(&buffer[..]));
     stream.write(response.as_bytes()).unwrap();
     stream.flush().unwrap();
 }
@@ -710,7 +831,7 @@ fn add_folder(mut stream: TcpStream, buffer: &[u8], filename: String) {
 
     let status_line = "HTTP/1.1 200 OK\r\n";
         
-    let response = format!("{}{}", status_line, web());
+    let response = format!("{}{}", status_line, web(buffer));
     stream.write(response.as_bytes()).unwrap();
     stream.flush().unwrap();
     
@@ -793,13 +914,13 @@ fn add_file(
     let status_line = "HTTP/1.1 200 OK\r\n";
 
     println!("\n\nDone with the POST add_file request my guy");
-    let response = format!("{}{}", status_line, web());
+    let response = format!("{}{}", status_line, web(buffer));
 
     stream.write(response.as_bytes()).unwrap();
     stream.flush().unwrap();
 }
 
-fn web() -> String {
+fn web( buffer: &[u8]) -> String {
     let folder = SHOW_FOLDER.lock().unwrap();
     println!("Definetly able to enter this folder: uploads/{}", folder);
     let entries = fs::read_dir(format!("uploads/{}", folder)).unwrap();
@@ -867,17 +988,29 @@ fn web() -> String {
         <button type=\"submit\">Add Folder </button>
     </form> "
     );
+    
+    if let Some(user) =  memmem::find(buffer, b"Cookie: Auth=\"user-").map(|p| p as usize) {
+        
+        let folder = &*folder.as_bytes();
+        let user = &buffer[user + "Cookie: Auth=\"user-".len() ..];
+        let end = memmem::find(user, b"-token").map(|p| p as usize).unwrap();
+        let user = &user[..end];
 
-    if *folder != "" {
-        html.push_str(&*format!(
-            "
-            Location: /{}
-            <br>
-            <button onclick=\"window.location.href='/'\">Go back to home</button>
-            ",
-            folder
-        ));
+        let folder = &folder[user.len()..];
+        let folder = String::from_utf8_lossy(&folder[..]);
+
+        if &folder != ""  {         //911 joke incoming
+            html.push_str(&*format!(
+                "
+                Location: /{}
+                <br>
+                <button onclick=\"window.location.href='/'\">Go back to home</button>
+                ",
+                folder
+            ));
+        }
     }
+    
 
     html.push_str("
         <h2> Saved Files:</h2>
@@ -993,6 +1126,54 @@ fn error_web(message: &str) -> String {
 
     html.push_str(" </body> </html>");
 
+    html
+}
+
+fn login_signup() -> String {
+    let html = String::from("
+        <!DOCTYPE html>
+        <html>
+        <head>
+        <title> Login / Signup bro </title>
+        </head>
+        <body>
+            <h1> Welcome to your File Manager Server </h1>
+
+            <h3> It seems you are not currently connected to an account <br> Please Signup or Login to use this platform<h3>
+        
+        <form action=\"/\" method=\"POST\">
+            <input type=\"text\" name=\"account\">
+            <button type=\"submit\"> Continue </button>
+        </form>
+        </body>
+        </html>
+    ");
+    html
+}
+
+fn password<T>(name: String, extra_info: Option<T>) -> String {
+    let html = String::from(format!("
+        <!DOCTYPE html>
+        <html>
+        <head>
+        <title> Login / Signup bro </title>
+        </head>
+        <body>
+            <h1> Welcome to your File Manager Server </h1>
+
+            <h3> Enter the password for your account<h3>
+        
+        <form action=\"/\" method=\"POST\">
+            <input type=\"hidden\" name=\"user\" value=\"{}\">
+            <input type=\"text\" name=\"password\">
+            <button type=\"submit\"> Login/Signup </button>
+        </form>
+
+        </body>
+        </html>
+    ",
+    name
+    ));
     html
 }
 
