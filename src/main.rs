@@ -14,6 +14,9 @@ use lazy_static::lazy_static;
 use zip::write::SimpleFileOptions;
 use walkdir::WalkDir;
 
+use encoding::all::WINDOWS_1252;
+use encoding::{DecoderTrap, Encoding};
+
 
 // use std::thread;
 // use std::time::Duration;
@@ -32,11 +35,23 @@ const ALLOWED_MIME_TYPES: &[&str] = &[
     "application/octet-stream",
 ]; // idk how this works
 
+//------------------------------------------------------------------------
+//keep testing your server blud
+//------------------------------------------------------------------------
 
 lazy_static!{
     static ref SHOW_FOLDER: Mutex<String> = Mutex::new(String::from(""));
 }
 
+fn decode_Windows_1255(bytes: &[u8]) -> String{
+    // Try UTF-8 first
+    if let Ok(utf8_str) = String::from_utf8(bytes.to_vec()) {
+        return utf8_str;
+    }
+    
+    // Fall back to Windows-1252
+    WINDOWS_1252.decode(bytes, DecoderTrap::Replace).unwrap_or_else(|_| String::from("Invalid encoding"))
+}
 fn main() {
     let mut port = String::new();
 
@@ -102,7 +117,7 @@ fn handle_connection(mut stream: TcpStream) {
         }
 
         received_data.extend_from_slice(&buffer[..bytes_read]);
-        println!("Request: {}", String::from_utf8_lossy(&received_data[..]));
+        // println!("Request: {}", String::from_utf8_lossy(&received_data[..]));
 
         if received_data[..3] == *b"GET" && bytes_read < buffer.len() {
             get_method(stream, received_data);
@@ -230,13 +245,15 @@ fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
     let pass = &buffer[pass + "password=".len()..];
     let pass = String::from_utf8_lossy(&pass[..]);
 
-    let mut file = match fs::File::open("users.txt") {
-        Ok(c) => c,
-        Err(_) => fs::File::create_new("users.txt").unwrap(),
-    };
     let mut text = Vec::new();
+    {
+        let mut file = match fs::File::open("users.txt") {
+            Ok(c) => c,
+            Err(_) => fs::File::create_new("users.txt").unwrap(),
+        };
 
-    file.read_to_end(&mut text);
+        file.read_to_end(&mut text);
+    }
 
     let search = format!("{}: {} ",user, pass);
     let search = search.as_bytes();
@@ -256,33 +273,54 @@ fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
     // make the user retry pass
     
     match memmem::find(&text[..], user.as_bytes()).map(|p| p as usize){
-        Some(_) => (()),
+        Some(user) => {
+            // this works well 
+            let search_boundary = &text[user..];
+            let mut end = memmem::find_iter(&search_boundary, " ").map(|p| p as usize);
+            end.next(); 
+            let search_boundary = &search_boundary[..end.next().unwrap() + 1];
+            println!("search_boundary = {:?}", String::from_utf8_lossy(&search_boundary[..])); 
+            println!("search = {:?}", String::from_utf8_lossy(&search[..])); 
+            if !(search_boundary == search) {
+                let status_line =  "HTTP/1.1 200 OK\r\n";
+                let response = format!("{}{}",status_line, password(user.to_string(), Some("try to remember the password u used when creating this account".to_string())));
+        
+                stream.write(response.as_bytes()).unwrap();
+                stream.flush().unwrap();
+                return;
+            } 
+            //else if it matches do nothing
+            ()
+        },
         None => {
-            let _ = file.write_all(search).unwrap(); //access is denied????
-            //solve this tmrw 04 03 2025 
+            let _ = { 
+                let metadata = fs::metadata(Path::new("users.txt")).unwrap();
+                if metadata.permissions().readonly() {
+                    println!("Write permission denied for {:?}", metadata);
+                } else {
+                    println!("Write permission accepted? for {:?}", metadata);
+                }
+
+                let mut file = fs::OpenOptions::new()
+                    .write(true)
+                    .append(true)
+                    .create(true)
+                    .open("users.txt")
+                    .map_err(|e| {
+                        eprintln!("Failed to open users.txt: {}", e);
+                        send_error_response(&mut stream, 500, "Server configuration error");
+                    }).unwrap();
+
+                writeln!(file, "{}: {} ", user, pass)
+                .map_err(|e| {
+                    eprintln!("Failed to write to users.txt: {}", e);
+                    send_error_response(&mut stream, 500, "Failed to create account");
+                }).unwrap();
+            };
             ()
         }, //do some shit
         //add user with pass
-    } 
-    if let Some(user_found) = memmem::find(&text[..], user.as_bytes()).map(|p| p as usize){
-        //check if user and pass match
-        let search_boundary = &text[user_found..];
-        let mut end = memmem::find_iter(&search_boundary, " ").map(|p| p as usize);
-        end.next(); 
-        let search_boundary = &search_boundary[..end.next().unwrap()];
-
-        println!("search_boundary = {:?}", String::from_utf8_lossy(&search_boundary[..])); 
-        if !(search_boundary == search) {
-            let status_line =  "HTTP/1.1 200 OK\r\n";
-            let response = format!("{}{}",status_line, password(user.to_string(), Some("try to remember the password u used when creating this account".to_string())));
-    
-            stream.write(response.as_bytes()).unwrap();
-            stream.flush().unwrap();
-        } 
-        //if they match do nothing
-        //else send response of pass again and tell the user to try again till it matches
-    } 
-    
+    }     
     //if the user and pass match show the corresponding 
 
 
@@ -464,13 +502,17 @@ fn parse_file<'a>(
     let filename_2 = filename1.next().unwrap();
     let filename = &filename_data[filename_1 + 1..filename_2];
     //3
-    // println!("filename = {:?}", String::from_utf8_lossy(&filename_data[..]));
-    let file = String::from_utf8_lossy(&filename[..]).to_string();
+    println!("Parse Upload filename = {:?}", String::from_utf8_lossy(&filename_data[..]));
+    println!("Parse Upload filename = {:?}", filename_data);
+    println!("Parse Upload filename = {:?}", decode_Windows_1255(&filename[..]));
+
+    // upload filename =uploads/"What’s the craziest way you’ve seen someone get humbled_&#129300;.mp4"
+    // Content-Type: video/mp4
 
     Ok((
         content,
         std::str::from_utf8(content_type).unwrap_or("application/octet-stream"),
-        file,
+        decode_Windows_1255(&filename[..]),
     ))
 }
 
@@ -628,10 +670,10 @@ fn rename_folder(mut stream: TcpStream, buffer: Vec<u8>, old_folder: String, new
     {
         let folder = SHOW_FOLDER.lock().unwrap();
         if *folder != "" {
-            println!("uploads/{}/{}", folder, old_folder);
-            println!("uploads/{}/{}", folder, new_folder);
-            fs::rename(format!("uploads/{}", old_folder), format!("uploads/{}/{}",folder, new_folder));
-            fs::rename(format!("data/{}", old_folder), format!("data/{}/{}",folder, new_folder));
+            println!("before uploads/{}/{}", folder, old_folder);
+            println!("after uploads/{}/{}", folder, new_folder);
+            fs::rename(format!("uploads/{}/{}", folder, old_folder), format!("uploads/{}/{}", folder, new_folder));
+            fs::rename(format!("data/{}/{}", folder, old_folder), format!("data/{}/{}", folder, new_folder));
         } else {
             println!("uploads/{}", old_folder);
             println!("uploads/{}", new_folder);
@@ -653,7 +695,11 @@ fn delet(mut stream: TcpStream, filename: String, buffer: Vec<u8>) {
         
         {
         let folder1 = SHOW_FOLDER.lock().unwrap();
-        if *folder1 != "" {
+        let folder1 = percent_decode_str(&*folder1)
+                        .decode_utf8_lossy()
+                        .replace("+", " ")
+                        .to_owned();
+        if &*folder1 != "" {
 
             println!("\n\nbuffer={}", String::from_utf8_lossy(&buffer[..]));
             if let Some(folder) = memmem::find(&buffer[..], b"folder=") {
@@ -676,50 +722,13 @@ fn delet(mut stream: TcpStream, filename: String, buffer: Vec<u8>) {
                 fs::remove_dir_all(&*format!("uploads/{}/{}", folder1, filename));
                 fs::remove_dir_all(&*format!("data/{}/{}", folder1, filename));
             } else {
-                println!("deleting file={}", filename);
+                
+                println!("deleting file={}/{}",folder1, filename);
                 fs::remove_file(&*format!("uploads/{}/{}", folder1, filename)); //dont u dare change this shi
                 fs::remove_file(&*format!("data/{}/{}", folder1, filename));
             }
         } else {
-            let entries = fs::read_dir("uploads").unwrap();
-            let mut file_names = Vec::new();
-
-            for i in entries {
-                let entry = i.unwrap();
-                let file_name = entry.file_name().into_string().unwrap();
-                file_names.push(file_name);
-            }
-
-            // println!("\nfile? {}", filename);
-            // println!("file = {}", file_names[delete]); //action=DELETE&filename=anime%2Ftest.txt
-
-            println!("\n\nbuffer={}", String::from_utf8_lossy(&buffer[..]));
-            if let Some(folder) = memmem::find(&buffer[..], b"folder=") {
-                let file = memmem::find(&buffer[..], b"filename=")
-                    .map(|p| p as usize)
-                    .unwrap();
-                let file = &buffer[file + "filename=".len()..];
-                let filename = String::from_utf8_lossy(&file[..]);
-
-                let filename = percent_decode_str(&filename)
-                                    .decode_utf8()
-                                    .unwrap();
-
-                let filename = decode_html(&filename)
-                                    .unwrap()
-                                    .replace("+", " ");
-
-                println!("filename suppoised to get deleted= {}", filename);
-
-                fs::remove_dir_all(&*format!("uploads/{}", filename));
-                fs::remove_dir_all(&*format!("data/{}", filename));
-            } else {
-                // a folder to delete
-                // let filename = decode_html(&*filename).unwrap();
-                println!("deleting file={}", filename);
-                fs::remove_file(&*format!("uploads/{}", filename)); //dont u dare change this shi
-                fs::remove_file(&*format!("data/{}.txt", filename));
-            }
+            send_error_response(&mut stream, 403, "Somehow you are not logged in");
         }
         
     }
@@ -880,13 +889,28 @@ fn add_file(
         let folder = SHOW_FOLDER.lock().unwrap();
         println!("folder im supposed to save the file={:?}", folder);
         if *folder != "" {
-            let filename_upload = format!("uploads/{}/{}", folder, filename);
-            // println!("upload filename ={}", filename_upload);
+            let filename_upload = format!("uploads/{}/{}", 
+                percent_decode_str(&folder)
+                .decode_utf8_lossy()
+                .replace("+", " ")
+                .to_owned(),
+                percent_decode_str(&filename)
+                .decode_utf8_lossy()
+                .replace("+", " ")
+                .to_owned());
+            println!("upload filename ={}\n\n", filename_upload);
+
+            
 
             let mut file = fs::File::create(&filename_upload).unwrap();
             file.write_all(content);
 
-            let filename_data = format!("data/{}/{}.txt", folder, filename);
+            let filename_data = format!("data/{}/{}.txt", 
+                percent_decode_str(&folder)
+                .decode_utf8_lossy()
+                .replace("+", " ")
+                .to_owned(),
+                filename);
             // println!("filename_data = {}", filename_data);
             println!("filename_data = {}", filename_data);
             let mut file2 = fs::File::create(&filename_data).unwrap();
@@ -920,11 +944,26 @@ fn add_file(
     stream.flush().unwrap();
 }
 
-fn web( buffer: &[u8]) -> String {
+fn web(buffer: &[u8]) -> String {
     let folder = SHOW_FOLDER.lock().unwrap();
-    println!("Definetly able to enter this folder: uploads/{}", folder);
-    let entries = fs::read_dir(format!("uploads/{}", folder)).unwrap();
+    // transform this uploads/figet/smashbros/dump%20me 
+    // in this uploads/figet/smashbros/dump me 
+    
+    println!("WEB\n\n\nDefinetly able to enter this folder: uploads/{}", 
+            percent_decode_str(&*folder)
+                .decode_utf8_lossy()
+                .replace("+", " ")
+                .to_owned()
+            );
+    let folder2 = folder.clone();
+    let entries = fs::read_dir(format!("uploads/{}", 
+        percent_decode_str(&folder2)
+                .decode_utf8_lossy()
+                .replace("+", " ")
+                .to_owned()
+    )).unwrap();
     let mut file_names = Vec::new();
+
     let mut files = Vec::new();
 
     for entry in entries {
@@ -1002,11 +1041,14 @@ fn web( buffer: &[u8]) -> String {
         if &folder != ""  {         //911 joke incoming
             html.push_str(&*format!(
                 "
-                Location: /{}
+                Location: {}
                 <br>
                 <button onclick=\"window.location.href='/'\">Go back to home</button>
                 ",
-                folder
+                percent_decode_str(&folder)
+                .decode_utf8_lossy()
+                .replace("+", " ")
+                .to_owned()
             ));
         }
     }
@@ -1151,7 +1193,7 @@ fn login_signup() -> String {
     html
 }
 
-fn password<T>(name: String, extra_info: Option<T>) -> String {
+fn password<T>(name: String, extra_info: Option<T>) -> String { 
     let html = String::from(format!("
         <!DOCTYPE html>
         <html>
