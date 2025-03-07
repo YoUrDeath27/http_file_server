@@ -194,7 +194,7 @@ fn get_method(mut stream: TcpStream, buffer: Vec<u8>) {
 
         println!("Done with the GET request my guy");
     
-        let response = format!("{}{}", status_line, web(&buffer[..]));
+        let response = format!("{}Content-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, web(&buffer[..]));
         
         // println!("should get a response?");
         // println!("{}", response);
@@ -341,7 +341,7 @@ fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
     
 
     let status_line = "HTTP/1.1 200 OK\r\n";
-    let response = format!("{}Set-Cookie: Auth=\"user-{}-token\"; Path=/; HttpOnly; SameSite=Strict; Max-Age=3600\r\nLocation: /\r\n{}", status_line, user, web(&buffer[..]));
+    let response = format!("{}Set-Cookie: Auth=\"user-{}-token\"; Path=/; HttpOnly; SameSite=Strict; Max-Age=3600\r\nLocation: /\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, user, web(&buffer[..]));
 
     stream.write(response.as_bytes()).unwrap();
     stream.flush().unwrap();
@@ -467,7 +467,13 @@ fn parse_file<'a>(
         let filename = &filename_data[filename_1 + 1..filename_2];
         //3
         // println!("filename = {:?}", String::from_utf8_lossy(&filename[..]));
-        let file = String::from_utf8_lossy(&filename[..]).to_string();
+        // let file = String::from_utf8_lossy(&filename[..]).to_string();
+
+        // Decode the filename from bytes
+        let file = decode_Windows_1255(&filename[..]);
+
+        // Decode HTML entities in the filename
+        let file = decode_html(&file).unwrap_or_else(|_| file);
 
         return Ok((
             content,
@@ -736,7 +742,7 @@ fn delet(mut stream: TcpStream, filename: String, buffer: Vec<u8>) {
     let status_line = "HTTP/1.1 200 OK\r\n";
 
     println!("\n\nDone with the POST delete action request my guy");
-    let response = format!("{}{}", status_line, web(&buffer[..]));
+    let response = format!("{}Content-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, web(&buffer[..]));
     stream.write(response.as_bytes()).unwrap();
     stream.flush().unwrap();
 }
@@ -812,11 +818,15 @@ fn add_folder(mut stream: TcpStream, buffer: &[u8], filename: String) {
         return;
     }
 
-    println!("path ={}", filename);
+    // saves to- do%20me 
+    // instead to- do me
+    println!("ADD_FOLDER\n  folder to add ={}", filename);
 
     {
         let folder = SHOW_FOLDER.lock().unwrap();
-        if *folder != "" {
+        let folder = percent_decode_str(&*folder)
+                        .decode_utf8_lossy();
+        if *folder != *"" {
             if Path::new(&format!("uploads/{}/{}", folder, filename)).exists() {
                 send_error_response(&mut stream, 403, "Folder already exists");
                 return;
@@ -824,23 +834,16 @@ fn add_folder(mut stream: TcpStream, buffer: &[u8], filename: String) {
             fs::create_dir_all(format!("uploads/{}/{}", folder, filename)).unwrap(); // handle gracefully
             fs::create_dir_all(format!("data/{}/{}", folder, filename)).unwrap();
         
-            println!("uploads/{:?}\n\n", filename);
+            println!("uploads/{}/{:?}\n\n",folder, filename);
             
         } else {
-            if Path::new(&format!("uploads/{}", filename)).exists() {
-                send_error_response(&mut stream, 403, "Folder already exists");
-                return;
-            }
-            fs::create_dir_all(format!("uploads/{}", filename)).unwrap(); // handle gracefully
-            fs::create_dir_all(format!("data/{}", filename)).unwrap();
-        
-            println!("uploads/{:?}\n\n", filename);
+            send_error_response(&mut stream, 403, "Somehow you are not connected");
         }
     }
 
     let status_line = "HTTP/1.1 200 OK\r\n";
         
-    let response = format!("{}{}", status_line, web(buffer));
+    let response = format!("{}Content-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, web(buffer));
     stream.write(response.as_bytes()).unwrap();
     stream.flush().unwrap();
     
@@ -938,7 +941,7 @@ fn add_file(
     let status_line = "HTTP/1.1 200 OK\r\n";
 
     println!("\n\nDone with the POST add_file request my guy");
-    let response = format!("{}{}", status_line, web(buffer));
+    let response = format!("{}Content-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, web(buffer));
 
     stream.write(response.as_bytes()).unwrap();
     stream.flush().unwrap();
@@ -956,11 +959,19 @@ fn web(buffer: &[u8]) -> String {
                 .to_owned()
             );
     let folder2 = folder.clone();
+    let folder3 = folder.clone();
+
+    let binding = decode_Windows_1255(&folder3.into_bytes()[..]);
+    let folder3 = percent_decode_str(
+        &*binding
+    ).decode_utf8_lossy().to_string().into_bytes();
+
+    // println!("uploads/{}", 
+    //     folder3
+    // );
+
     let entries = fs::read_dir(format!("uploads/{}", 
-        percent_decode_str(&folder2)
-                .decode_utf8_lossy()
-                .replace("+", " ")
-                .to_owned()
+        decode_Windows_1255(&folder3[..])
     )).unwrap();
     let mut file_names = Vec::new();
 
@@ -970,6 +981,7 @@ fn web(buffer: &[u8]) -> String {
         let entry = entry.unwrap();
         files.push(entry.path());
         let file_name = entry.file_name().into_string().unwrap();
+        println!("entry in bytes= {:?}", &file_name.clone().into_bytes()[..]);
         file_names.push(file_name);
     }
 
@@ -995,6 +1007,10 @@ fn web(buffer: &[u8]) -> String {
         }
 
         li > form {
+            margin: 0;
+        }
+
+        ul > li > div:nth-child(1){
             margin: 0;
         }
 
@@ -1093,17 +1109,22 @@ fn web(buffer: &[u8]) -> String {
         } else {
             html.push_str(&*format!(
                 "<li> 
-                    {}
-                    <form action=\"/\" method =\"POST\">
-                        <input type=\"hidden\" name=\"action\" value=\"DELETE\">
-                        <input type=\"hidden\" name=\"filename\" value=\"{}\">
-                        <button type=\"submit\">Delete</button>
-                    </form>
-                    <form action=\"/\" method =\"POST\">
-                        <input type=\"hidden\" name=\"action\" value=\"DOWNLOAD\">
-                        <input type=\"hidden\" name=\"filename\" value=\"{}\">
-                        <button type=\"submit\">DOWNLOAD</button>
-                    </form>
+                    <div>
+                        {}
+                    </div>
+                    <br>
+                    <div>
+                        <form action=\"/\" method =\"POST\">
+                            <input type=\"hidden\" name=\"action\" value=\"DELETE\">
+                            <input type=\"hidden\" name=\"filename\" value=\"{}\">
+                            <button type=\"submit\">Delete</button>
+                        </form>
+                        <form action=\"/\" method =\"POST\">
+                            <input type=\"hidden\" name=\"action\" value=\"DOWNLOAD\">
+                            <input type=\"hidden\" name=\"filename\" value=\"{}\">
+                            <button type=\"submit\">DOWNLOAD</button>
+                        </form>
+                    </div>
                 </li>\n",
                 file_names[i], file_names[i], file_names[i]
             ));
