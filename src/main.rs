@@ -4,6 +4,7 @@
     use percent_encoding::percent_decode_str;
     use std::{
         fs,
+        io::Error,
         sync::Mutex,
         path::{Path, PathBuf},
         io::{prelude::*, Read, Write},
@@ -256,7 +257,12 @@ fn get_method(mut stream: TcpStream, buffer: Vec<u8>) {
         }
         println!("Done with the normal GET request my guy");
 
-        let response = format!("{}{}", status_line, web(&buffer[..]));
+        let site = web(&buffer[..]);
+        if(!memmem::find(site.as_bytes(), b"<html>").map(|p| p as usize).is_some()){
+            send_error_response(&mut stream, 400, "There has been an error generating the webpage");
+            return;
+        }
+        let response = format!("{}{}", status_line, site);
 
         // println!("{}", response);
         if let Err(e) = stream.write_all(response.as_bytes()) {
@@ -296,7 +302,12 @@ fn get_method(mut stream: TcpStream, buffer: Vec<u8>) {
 
         println!("Done with the GET request my guy");
     
-        let response = format!("{}Content-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, web(&buffer[..]));
+        let site = web(&buffer[..]);
+        if(!memmem::find(site.as_bytes(), b"<html>").map(|p| p as usize).is_some()){
+            send_error_response(&mut stream, 400, "There has been an error generating the webpage");
+            return;
+        }
+        let response = format!("{}Content-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, site);
         
         // println!("should get a response?");
         // println!("{}", response);
@@ -397,7 +408,10 @@ fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
             Ok(c) => c,
             Err(_) => match fs::File::create_new("users.txt"){
                 Ok(x) => x,
-                Err(e) => println!("failed to create the ursers \"database\"");
+                Err(e) => {
+                    println!("failed to create the ursers \"database\"");
+                    return Default::default();
+                },
             },
         };
 
@@ -438,12 +452,20 @@ fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
                 let response = format!("{}{}",status_line, password(user.to_string(), Some("try to remember the password u used when creating this account")));
         
                 match stream.write(response.as_bytes()){
-                    Ok(x) => x,
-                    Err(e) => println!("Failed to write ig"),
+                    Ok(x) => {println!("The authentification worked well"); x},
+                    Err(e) => {
+                        send_error_response(&mut stream, 400, "There was a problem responding");
+                        println!("Failed to respond ig???");
+                        return;
+                    }
                 };
                 match stream.flush(){
                     Ok(x) => x,
-                    Err(e) => println!("Failed to flush (the toilet)");
+                    Err(x) => {
+                        send_error_response(&mut stream, 400, "How tf did this fail");
+                        println!("Failed to respond ig???");
+                        return;
+                    }
                 };
                 return;
             } 
@@ -472,13 +494,13 @@ fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
                     .create(true)
                     .open("users.txt")
                     .map_err(|e| {
-                        eprintln!("Failed to open users.txt: {}", e);
+                        eprintln!("Failed to open users.txt: {:?}", e);
                         send_error_response(&mut stream, 500, "Server configuration error");
                         return;
                     }){
-                        Some(x)=> x,
-                        None => {
-                            eprintln!("Failed to open users.txt: {}", e);
+                        Ok(x)=> x,
+                        Err(e) => {
+                            eprintln!("Failed to open users.txt: {:?}", e);
                             send_error_response(&mut stream, 500, "Server configuration error");
                             return;
                         }
@@ -491,7 +513,7 @@ fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
                 }){
                     Ok(x) => x,
                     Err(e) => {
-                        eprintln("There is a severe problem in the usersdatabase");
+                        eprintln!("There is a severe problem in the usersdatabase");
                         send_error_response(&mut stream, 500, "Failed to create account, please try again later ");
                         return;
                     }
@@ -506,9 +528,9 @@ fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
 
     {
         let mut folder = match SHOW_FOLDER.lock(){
-            Some(x) => x;
-            None => {
-                println!("cant identify the user from the folder mutex");
+            Ok(x) => x,
+            Err(e) => {
+                println!("cant identify the user from the folder mutex\n{:?}", e);
                 send_error_response(&mut stream, 500, "There is a problem that we dont know how u got here");
                 return;
             }
@@ -528,7 +550,13 @@ fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
     
 
     let status_line = "HTTP/1.1 200 OK\r\n";
-    let response = format!("{}Set-Cookie: Auth=\"user-{}-token\"; Path=/; HttpOnly; SameSite=Strict; Max-Age=3600\r\nLocation: /\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, user, web(&buffer[..]));
+    let site = web(&buffer[..]);
+    if(!memmem::find(site.as_bytes(), b"<html>").map(|p| p as usize).is_some()){
+        send_error_response(&mut stream, 400, "There has been an error generating the webpage");
+        return;
+    }
+
+    let response = format!("{}Set-Cookie: Auth=\"user-{}-token\"; Path=/; HttpOnly; SameSite=Strict; Max-Age=3600\r\nLocation: /\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, user, site);
 
     println!("\n\n\n\n\nresponse = \n{}", response);
     match stream.write(response.as_bytes()){
@@ -657,8 +685,8 @@ fn parse_file<'a>(
             Some(x) => x,
             None => {
                 println!("We might have some trouble boss");
-                send_error_response(&mut stream, 500, "Why are you trying to break the server boss?");
-                return;
+                send_error_response(stream, 500, "Why are you trying to break the server boss?");
+                return Ok((&[], "", Default::default()));
             }
         };
         let content_type = &buffer[content_type + "Content-Type:\"".len()..];
@@ -671,8 +699,8 @@ fn parse_file<'a>(
                 Some(x) => x,
                 None => {
                     println!("This is not ok ");
-                    send_error_response(&mut stream, 500, "This file or request is corrupted <br> stop it");
-                    return;
+                    send_error_response(stream, 500, "This file or request is corrupted <br> stop it");
+                    return Ok((&[], "", Default::default()));
                 }
             };
         let content_type = &content_type[..end];
@@ -688,8 +716,8 @@ fn parse_file<'a>(
                 Some(x) => x,
                 None => {
                     println!("Why does this file not have a name?");
-                    send_error_response(&mut stream, 400, "The file u tried to upload does not contain a name<br>weird");
-                    return;
+                    send_error_response(stream, 400, "The file u tried to upload does not contain a name<br>weird");
+                    return Ok((&[], "", Default::default()));
                 }
             };
         let filename_data = &info[filename + "filename=".len()..];
@@ -699,16 +727,16 @@ fn parse_file<'a>(
             Some(x) => x,
             None => {
                 println!("Nope");
-                send_error_response(&mut stream, 400, "Did you play around before sending this file?");
-                return;
+                send_error_response(stream, 400, "Did you play around before sending this file?");
+                return Ok((&[], "", Default::default()));
             }
         };
         let filename_2 = match filename1.next() {
             Some(x) => x,
             None => {
                 println!("Nope");
-                send_error_response(&mut stream, 400, "Did you play around before sending this file? <br>Are you sure about that?");
-                return;
+                send_error_response(stream, 400, "Did you play around before sending this file? <br>Are you sure about that?");
+                return Ok((&[], "", Default::default()));
             }
         };
         let filename = &filename_data[filename_1 + 1..filename_2];
@@ -728,13 +756,13 @@ fn parse_file<'a>(
             file,
         ));
     }
-
+    
     let content_type = match content_type.next() {
         Some(x) => x,
         None => {
             println!("How did you get past the first check?");
-            send_error_response(&mut stream, 400, "I am impressed if you managed to get this error");
-            return;
+            send_error_response(stream, 400, "I am impressed if you managed to get this error");
+            return Ok((&[], "", Default::default()));
         }
     };
     let content_type = &buffer[content_type + "Content-Type:\"".len()..];
@@ -747,14 +775,44 @@ fn parse_file<'a>(
             Some(x) => x,
             None => {
                 println!("Looks like someone played around a bit");
-                send_error_response(&mut stream, 400, "The file/request has probably been corrupted during transmission");
-                return;
+                send_error_response(stream, 400, "The file/request has probably been corrupted during transmission");
+                return Ok((&[], "", Default::default()));
             }
         };
     let content_type = &content_type[..end];
 
     //2
-        //already got the filename a lil bit above
+    let filename = match memmem::find_iter(info, b"filename=")
+        .map(|p| p as usize)
+        .next(){
+            Some(x) => x,
+            None => {
+                println!("Why does this file not have a name?");
+                send_error_response(stream, 400, "The file u tried to upload does not contain a name<br>weird");
+                return Ok((&[], "", Default::default()));
+            }
+        };
+    let filename_data = &info[filename + "filename=".len()..];
+
+    let mut filename1 = memmem::find_iter(filename_data, "\"").map(|p| p as usize);
+    let filename_1 = match filename1.next() {
+        Some(x) => x,
+        None => {
+            println!("Nope");
+            send_error_response(stream, 400, "Did you play around before sending this file?");
+            return Ok((&[], "", Default::default()));
+        }
+    };
+    let filename_2 = match filename1.next() {
+        Some(x) => x,
+        None => {
+            println!("Nope");
+            send_error_response(stream, 400, "Did you play around before sending this file? <br>Are you sure about that?");
+            return Ok((&[], "", Default::default()));
+        }
+    };
+    let filename = &filename_data[filename_1 + 1..filename_2];
+
     //3
     println!("Parse Upload filename = {:?}", String::from_utf8_lossy(&filename_data[..]));
     println!("Parse Upload filename = {:?}", filename_data);
@@ -852,9 +910,9 @@ fn post_action(mut stream: TcpStream, buffer: Vec<u8>, action: usize) {
 fn download_folder(mut stream: TcpStream, folder_name: String) {
 
     let mut folder = match SHOW_FOLDER.lock(){
-            Some(x) => x;
-            None => {
-                println!("cant identify the user from the folder mutex");
+            Ok(x) => x,
+            Err(e) => {
+                println!("cant identify the user from the folder mutex\n{:?}", e);
                 send_error_response(&mut stream, 500, "There is a problem that we dont know how u got here");
                 return;
             }
@@ -938,8 +996,8 @@ fn zip_folder(folder_path: &Path, zip_path: &Path) -> Result<(), Box<dyn std::er
             Some(x) => x,
             None => {
                 println!("Yep, ur cooked");
-                send_error_response(&mut stream, 500, "There was a problem getting your folder, there is a chance it got corrupted :'(");
-                return;
+                // send_error_response(&mut stream, 500, "There was a problem getting your folder, there is a chance it got corrupted :'(");
+                return Err(Box::new(Error::new(std::io::ErrorKind::Other, "There was a problem getting your folder, there is a chance it got corrupted :'(")));
             }
         };
 
@@ -959,9 +1017,9 @@ fn zip_folder(folder_path: &Path, zip_path: &Path) -> Result<(), Box<dyn std::er
 fn rename_folder(mut stream: TcpStream, buffer: Vec<u8>, old_folder: String, new_folder: String) {
     {
         let mut folder = match SHOW_FOLDER.lock(){
-            Some(x) => x;
-            None => {
-                println!("cant identify the user from the folder mutex");
+            Ok(x) => x,
+            Err(e) => {
+                println!("cant identify the user from the folder mutex\n{:?}", e);
                 send_error_response(&mut stream, 500, "There is a problem that we dont know how u got here");
                 return;
             }
@@ -983,7 +1041,13 @@ fn rename_folder(mut stream: TcpStream, buffer: Vec<u8>, old_folder: String, new
 
     println!("\n\nDone with the POST RENAME_FOLDER action request my guy");
 
-    let response = format!("{}{}", status_line, web(&buffer[..]));
+    let site = web(&buffer[..]);
+    if(!memmem::find(site.as_bytes(), b"<html>").map(|p| p as usize).is_some()){
+        send_error_response(&mut stream, 400, "There has been an error generating the webpage");
+        return;
+    }
+
+    let response = format!("{}{}", status_line, site);
     match stream.write(response.as_bytes()){
         Ok(x) => {println!("The authentification worked well"); x},
         Err(e) => {
@@ -1006,14 +1070,14 @@ fn delet(mut stream: TcpStream, filename: String, buffer: Vec<u8>) {
         
         {
         let mut folder = match SHOW_FOLDER.lock(){
-            Some(x) => x;
-            None => {
-                println!("cant identify the user from the folder mutex");
+            Ok(x) => x,
+            Err(e) => {
+                println!("cant identify the user from the folder mutex\n{:?}", e);
                 send_error_response(&mut stream, 500, "There is a problem that we dont know how u got here");
                 return;
             }
         };
-        let folder1 = percent_decode_str(&*folder1)
+        let folder1 = percent_decode_str(&*folder)
                         .decode_utf8_lossy()
                         .replace("+", " ")
                         .to_owned();
@@ -1026,7 +1090,8 @@ fn delet(mut stream: TcpStream, filename: String, buffer: Vec<u8>) {
                         Some(x) => x, 
                         None => {
                             println!("unnable to delete this ");
-                            send_error_response(&mut stream, 400, "The deletion cannot be completed 💔 ")
+                            send_error_response(&mut stream, 400, "The deletion cannot be completed 💔 ");
+                            return;
                         }
                     };
                 let file = &buffer[file + "filename=".len()..];
@@ -1034,16 +1099,22 @@ fn delet(mut stream: TcpStream, filename: String, buffer: Vec<u8>) {
 
                 let filename = match percent_decode_str(&filename)
                                     .decode_utf8(){
-                                        Some(x) => x,
-                                        None => {
-                                            println!("It has been unnable to decode");
+                                        Ok(x) => x,
+                                        Err(e) => {
+                                            println!("It has been unnable to decode\n{:?}", e);
                                             send_error_response(&mut stream, 400, "The deletion cannot be completed since it contains weird characters");
+                                            return;
                                         }
                                     };
 
-                let filename = decode_html(&filename)
-                                    .unwrap()
-                                    .replace("+", " ");
+                let filename = match decode_html(&filename){
+                    Ok(x) => x,
+                    Err(e) => {
+                        println!("Unnable to decode html \n{:?}", e);
+                        send_error_response(&mut stream, 400, "It contains non UTF-8 characters");
+                        return;
+                    }
+                }.replace("+", " ");
 
                 println!("filename suppoised to get deleted= uploads/{}/{}", folder1, filename);
 
@@ -1064,36 +1135,105 @@ fn delet(mut stream: TcpStream, filename: String, buffer: Vec<u8>) {
     let status_line = "HTTP/1.1 200 OK\r\n";
 
     println!("\n\nDone with the POST delete action request my guy");
-    let response = format!("{}Content-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, web(&buffer[..]));
-    stream.write(response.as_bytes()).unwrap();
-    stream.flush().unwrap();
+    let site = web(&buffer[..]);
+    if(!memmem::find(site.as_bytes(), b"<html>").map(|p| p as usize).is_some()){
+        send_error_response(&mut stream, 400, "There has been an error generating the webpage");
+        return;
+    }
+    let response = format!("{}Content-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, site);
+    match stream.write(response.as_bytes()){
+        Ok(x) => {println!("The authentification worked well"); x},
+        Err(e) => {
+            send_error_response(&mut stream, 400, "There was a problem responding");
+            println!("Failed to respond ig???");
+            return;
+        }
+    };
+    match stream.flush(){
+        Ok(x) => x,
+        Err(x) => {
+            send_error_response(&mut stream, 400, "How tf did this fail");
+            println!("Failed to respond ig???");
+            return;
+        }
+    };
 }
 
 fn download(mut stream: TcpStream, filename: String, buffer: Vec<u8>) {
-    let entries = fs::read_dir("uploads").unwrap();
+    let entries = match fs::read_dir("uploads"){
+        Ok(x) => x,
+        Err(e) => {
+            println!("I was unnable to read the directory \"uploads\"\n{:?}", e);
+            send_error_response(&mut stream, 404, "There is a problem accessing you files, please try again later");
+            return;
+
+        }
+    };
     let mut file_names: Vec<String> = Vec::new();
     for entry in entries {
-        let entry = entry.unwrap();
-        let file_name = entry.file_name().into_string().unwrap();
+        let entry = match entry{
+            Ok(x) => x,
+            Err(e) => {
+                println!("No users uploads found\n{:?}", e);
+                send_error_response(&mut stream, 404, "There is a problem accessing your uploads, try again later");
+                return;
+            }
+        };
+        let file_name = match entry.file_name().into_string(){
+            Ok(x) => x,
+            Err(e) => {
+                println!("The user's username is unnable to be converted to string\n{:?}", e);
+                send_error_response(&mut stream, 404, "The user contains illegitimate characters");
+                return;
+            }
+        };
         file_names.push(file_name);
     }
 
     let mut folder;
 
     {
-        folder = SHOW_FOLDER.lock().unwrap();
+        folder = match SHOW_FOLDER.lock(){
+            Ok(x) => x,
+            Err(e) => {
+                println!("cant identify the user from the folder mutex\n{:?}", e);
+                send_error_response(&mut stream, 500, "There is a problem that we dont know how u got here");
+                return;
+            }
+        };
     }
 
     // let user = memmem::find()
 
     println!("Filename ig ={}/{}",folder, filename);
-    let mut file = fs::File::open(format!("uploads/{}/{}", folder, filename)).unwrap();
-    let mut data = fs::File::open(format!("data/{}/{}.txt", folder, filename)).unwrap();
+    let mut file = match fs::File::open(format!("uploads/{}/{}", folder, filename)){
+        Ok(x) => x,
+        Err(e) => {
+            println!("The user's uploads folder cannot be read\n{:?}", e);
+            send_error_response(&mut stream, 404, "We are unnable to locate your file, please try again later");
+            return;
+        }
+    };
+    let mut data = match fs::File::open(format!("data/{}/{}.txt", folder, filename)){
+        Ok(x) => x,
+        Err(e) => {
+            println!("The user's data folder cannot be read\n{:?}", e);
+            send_error_response(&mut stream, 404, "We are unnable to locate your file's data, please try again later");
+            return;
+        }
+    };
 
     println!("{}", format!("download uploads/{}/{}", folder, filename));
 
     let mut read = Vec::new();
-    file.read_to_end(&mut read).unwrap();
+    match file.read_to_end(&mut read){
+        Ok(x) => x,
+        Err(e) =>{
+            println!("uhm, the file cannot be read or no data is inside it\n{:?}", e);
+            send_error_response(&mut stream, 404, "There is a problem reading the data of your file");
+            return;
+        }
+    };  
 
     let mut content_type = String::new();
     data.read_to_string(&mut content_type);
@@ -1102,9 +1242,14 @@ fn download(mut stream: TcpStream, filename: String, buffer: Vec<u8>) {
 
     // println!("filename={}", decode_html(&filename).unwrap());
     if filename.contains("/"){
-        let start = memmem::find(filename.as_bytes(), b"/")
-                                .map(|p| p as usize)
-                                .unwrap();
+        let start = match memmem::find(filename.as_bytes(), b"/")
+                                .map(|p| p as usize){
+                                    Some(x) => x,
+                                    None => {
+                                        println!("");
+                                        return;
+                                    }
+                                };
 
         let filename = String::from_utf8_lossy(&filename.as_bytes()[start + 1..]);
 
@@ -1112,14 +1257,42 @@ fn download(mut stream: TcpStream, filename: String, buffer: Vec<u8>) {
             "{}{}\r\nContent-Disposition: W; filename=\"{}\"\r\nContent-Length: {}\r\n\r\n",
             status_line,
             content_type,
-            decode_html(&filename).unwrap(),
+            match decode_html(&filename){
+                Ok(x) => x,
+                Err(e) => {
+                    println!("Unnable to decode the filename {:?}", e);
+                    send_error_response(&mut stream, 400, "Filename is unnable to be decoded sir");
+                    return;
+                }
+            },
             read.len()
         );
 
         println!("Done with the POST download action my guy");
-        stream.write(response.as_bytes()).unwrap();
-        stream.write(&read[..]).unwrap();
-        stream.flush().unwrap();
+        match stream.write(response.as_bytes()){
+            Ok(x) => {println!("The authentification worked well"); x},
+            Err(e) => {
+                send_error_response(&mut stream, 400, "There was a problem responding");
+                println!("Failed to respond ig???");
+                return;
+            }
+        };
+        match stream.write(&read[..]){
+            Ok(x) => {println!("The authentification worked well"); x},
+            Err(e) => {
+                send_error_response(&mut stream, 400, "There was a problem responding");
+                println!("Failed to respond ig???");
+                return;
+            }
+        };
+        match stream.flush(){
+            Ok(x) => x,
+            Err(x) => {
+                send_error_response(&mut stream, 400, "How tf did this fail");
+                println!("Failed to respond ig???");
+                return;
+            }
+        };
         return;
     }
 
@@ -1128,14 +1301,42 @@ fn download(mut stream: TcpStream, filename: String, buffer: Vec<u8>) {
         "{}{}\r\nContent-Disposition: attachment; filename=\"{}\"\r\nContent-Length: {}\r\n\r\n",
         status_line,
         content_type,
-        decode_html(&filename).unwrap(),
+        match decode_html(&filename){
+                Ok(x) => x,
+                Err(e) => {
+                    println!("Unnable to decode the filename {:?}", e);
+                    send_error_response(&mut stream, 400, "Filename is unnable to be decoded sir");
+                    return;
+                }
+            },
         read.len()
     );
 
     println!("Done with the POST download action my guy");
-    stream.write(response.as_bytes()).unwrap();
-    stream.write(&read[..]).unwrap();
-    stream.flush().unwrap();
+    match stream.write(response.as_bytes()){
+        Ok(x) => {println!("The write worked well"); x},
+        Err(e) => {
+            send_error_response(&mut stream, 400, "There was a problem responding");
+            println!("Failed to respond ig???");
+            return;
+        }
+    };
+    match stream.write(&read[..]){
+        Ok(x) => {println!("The authentification worked well"); x},
+        Err(e) => {
+            send_error_response(&mut stream, 400, "There was a problem responding");
+            println!("Failed to respond ig???");
+            return;
+        }
+    };
+    match stream.flush(){
+        Ok(x) => x,
+        Err(x) => {
+            send_error_response(&mut stream, 400, "How tf did this fail");
+            println!("Failed to respond ig???");
+            return;
+        }
+    };
     // println!("filename={}", filename);
     
 }
@@ -1154,7 +1355,14 @@ fn add_folder(mut stream: TcpStream, buffer: &[u8], filename: String) {
     println!("ADD_FOLDER\n  folder to add ={}", filename);
 
     {
-        let folder = SHOW_FOLDER.lock().unwrap();
+        let folder = match SHOW_FOLDER.lock(){
+            Ok(x) => x,
+            Err(e) => {
+                println!("cant identify the user from the folder mutex\n{:?}", e);
+                send_error_response(&mut stream, 500, "There is a problem that we dont know how u got here");
+                return;
+            }
+        };
         let folder = percent_decode_str(&*folder)
                         .decode_utf8_lossy();
         if *folder != *"" {
@@ -1162,8 +1370,22 @@ fn add_folder(mut stream: TcpStream, buffer: &[u8], filename: String) {
                 send_error_response(&mut stream, 403, "Folder already exists");
                 return;
             }
-            fs::create_dir_all(format!("uploads/{}/{}", folder, filename)).unwrap(); // handle gracefully
-            fs::create_dir_all(format!("data/{}/{}", folder, filename)).unwrap();
+            match fs::create_dir_all(format!("uploads/{}/{}", folder, filename)){
+                Ok(x) => x,
+                Err(e) => {
+                    println!("Unnable to create the folder");
+                    send_error_response(&mut stream, 500, "We were unnable to create you folder, please try again later");
+                    return;
+                }
+            }; // handle gracefully
+            match fs::create_dir_all(format!("data/{}/{}", folder, filename)){
+                Ok(x) => x,
+                Err(e) => {
+                    println!("Unnable to create the folder for data");
+                    send_error_response(&mut stream, 500, "We were unnable to create you folder for data, please try again later");
+                    return;
+                }
+            };
         
             println!("uploads/{}/{:?}\n\n",folder, filename);
             
@@ -1173,10 +1395,28 @@ fn add_folder(mut stream: TcpStream, buffer: &[u8], filename: String) {
     }
 
     let status_line = "HTTP/1.1 200 OK\r\n";
-        
-    let response = format!("{}Content-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, web(buffer));
-    stream.write(response.as_bytes()).unwrap();
-    stream.flush().unwrap();
+    let site = web(buffer);
+    if(!memmem::find(site.as_bytes(), b"<html>").map(|p| p as usize).is_some()){
+        send_error_response(&mut stream, 400, "There has been an error generating the webpage");
+        return;
+    }
+    let response = format!("{}Content-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, site);
+    match stream.write(response.as_bytes()){
+        Ok(x) => {println!("The write worked well"); x},
+        Err(e) => {
+            send_error_response(&mut stream, 400, "There was a problem responding");
+            println!("Failed to respond ig???");
+            return;
+        }
+    };
+    match stream.flush(){
+        Ok(x) => x,
+        Err(x) => {
+            send_error_response(&mut stream, 400, "How tf did this fail");
+            println!("Failed to respond ig???");
+            return;
+        }
+    };
     
 }
 
@@ -1199,7 +1439,15 @@ fn add_file_in_folder(
     let folder = &buffer[folder + "name=\"folder\"".len() + "\r\n\r\n".len()..];
 
     // println!("folder? = {}", String::from_utf8_lossy(&folder[..]));
-    let end = memmem::find(folder, b"\r\n").map(|p| p as usize).unwrap();
+    let end = match memmem::find(folder, b"\r\n").map(|p| p as usize){
+        Some(x) => x,
+        None => {
+            println!("this shit probly got corrupted");
+            send_error_response(&mut stream, 400, "YOur request oribably got corrupted");
+            return;
+            
+        }
+    };
     let folder = &folder[..end];
 
     // println!("filename before change = {}", filename);
@@ -1220,7 +1468,14 @@ fn add_file(
 ) {
     // do some shady shit
     {
-        let folder = SHOW_FOLDER.lock().unwrap();
+        let folder = match SHOW_FOLDER.lock(){
+            Ok(x) => x,
+            Err(e) => {
+                println!("cant identify the user from the folder mutex\n{:?}", e);
+                send_error_response(&mut stream, 500, "There is a problem that we dont know how u got here");
+                return;
+            }
+        };
         println!("folder im supposed to save the file={:?}", folder);
         if *folder != "" {
             let filename_upload = format!("uploads/{}/{}", 
@@ -1272,14 +1527,26 @@ fn add_file(
     let status_line = "HTTP/1.1 200 OK\r\n";
 
     println!("\n\nDone with the POST add_file request my guy");
-    let response = format!("{}Content-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, web(buffer));
+    let site = web(buffer);
+    if(!memmem::find(site.as_bytes(), b"<html>").map(|p| p as usize).is_some()){
+        send_error_response(&mut stream, 400, "There has been an error generating the webpage");
+        return;
+    }
+    let response = format!("{}Content-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, site);
 
     stream.write(response.as_bytes()).unwrap();
     stream.flush().unwrap();
 }
 
 fn web(buffer: &[u8]) -> String {
-    let folder = SHOW_FOLDER.lock().unwrap();
+    let folder = match SHOW_FOLDER.lock(){
+            Ok(x) => x,
+            Err(e) => {
+                println!("cant identify the user from the folder mutex\n{:?}", e);
+                // send_error_response(&mut stream, 500, "There is a problem that we dont know how u got here");
+                return String::from("");
+            }
+        };
     // transform this uploads/figet/smashbros/dump%20me 
     // in this uploads/figet/smashbros/dump me 
     
@@ -1301,17 +1568,38 @@ fn web(buffer: &[u8]) -> String {
     //     folder3
     // );
 
-    let entries = fs::read_dir(format!("uploads/{}", 
+    let entries =match fs::read_dir(format!("uploads/{}", 
         decode_Windows_1255(&folder3[..])
-    )).unwrap();
+    )){
+        Ok(x) => x,
+        Err(e) => {
+            println!("Unnable to read the folder\n{}", e);
+            // send_error_response(&mut stream, 404, "Unnable to locate your folder with files, try logging in again");
+            return String::from("");
+        }
+    };
     let mut file_names = Vec::new();
 
     let mut files = Vec::new();
 
     for entry in entries {
-        let entry = entry.unwrap();
+        let entry = match entry{
+            Ok(x) => x,
+            Err(e) => {
+                println!("No users uploads found\n{:?}", e);
+                // send_error_response(&mut stream, 404, "There is a problem accessing your uploads, try again later");
+                return String::from("");
+            }
+        };
         files.push(entry.path());
-        let file_name = entry.file_name().into_string().unwrap();
+        let file_name = match entry.file_name().into_string(){
+            Ok(x) => x,
+            Err(e) => {
+                println!("The user's username is unnable to be converted to string\n{:?}", e);
+                // send_error_response(&mut stream, 404, "The user contains illegitimate characters");
+                return String::from("");
+            }
+        };
         println!("entry in bytes= {:?}", &file_name.clone().into_bytes()[..]);
         file_names.push(file_name);
     }
@@ -1379,7 +1667,14 @@ fn web(buffer: &[u8]) -> String {
         
         let folder = &*folder.as_bytes();
         let user = &buffer[user + "Cookie: Auth=\"user-".len() ..];
-        let end = memmem::find(user, b"-token").map(|p| p as usize).unwrap();
+        let end = match memmem::find(user, b"-token").map(|p| p as usize){
+            Some(x) => x,
+            None => {
+                println!("Unnable to find the end of Auth token");
+                // send_error_response(&mut stream, 404, "We were unnable to locate your auth key<br> u tampered with it right?");
+                return String::from("");
+            }
+        };
         let user = &user[..end];
 
         let folder = &folder[user.len()..];
