@@ -42,6 +42,8 @@ const ALLOWED_MIME_TYPES: &[&str] = &[
 
     for now it works okish
     but still, keep testing so u can develop yourself
+
+    dupa ce implementezi sa ai un image preview, MODULEAZA-TI proiectul acum cat inca e destul de mic
 ------------------------------------------------------------------------
 */
 
@@ -168,6 +170,8 @@ fn handle_connection(mut stream: TcpStream) {
         let is_get = memmem::find(&request.header, b"GET").is_some();
         let is_post = memmem::find(&request.header, b"POST").is_some();
 
+        println!("header: {}", String::from_utf8_lossy(&request.header[..]));
+
         let Content_count = match memmem::find(&received_data[..], b"Content-Length:").map(|p| p as usize) {
             Some(x) => x,
             None => 0,
@@ -258,7 +262,7 @@ fn get_method(mut stream: TcpStream, buffer: Vec<u8>) {
         println!("Done with the normal GET request my guy");
 
         let site = web(&buffer[..]);
-        if(!memmem::find(site.as_bytes(), b"<html>").map(|p| p as usize).is_some()){
+        if(!memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some()){
             send_error_response(&mut stream, 400, "There has been an error generating the webpage");
             return;
         }
@@ -273,9 +277,12 @@ fn get_method(mut stream: TcpStream, buffer: Vec<u8>) {
         }
 
 
+    } else if memmem::find(&buffer, b"/uploads/").map(|p| p as usize).is_some(){
+        //for images
+        web_send_image(stream, buffer.to_vec());
     } else if buffer[..17] == *b"GET /open_folder/"{
 
-        println!("buffer = {}", String::from_utf8_lossy(&buffer[..]));
+        // println!("buffer = {}", String::from_utf8_lossy(&buffer[..]));
         let status_line = "HTTP/1.1 200 OK\r\n"; 
 
         let mut end = memmem::find_iter(&buffer[..], b" ").map(|p| p as usize);
@@ -303,7 +310,7 @@ fn get_method(mut stream: TcpStream, buffer: Vec<u8>) {
         println!("Done with the GET request my guy");
     
         let site = web(&buffer[..]);
-        if(!memmem::find(site.as_bytes(), b"<html>").map(|p| p as usize).is_some()){
+        if(!memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some()){
             send_error_response(&mut stream, 400, "There has been an error generating the webpage");
             return;
         }
@@ -369,7 +376,7 @@ fn auth_user(mut stream: TcpStream, buffer: Vec<u8>) {
 }
 
 fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
-    println!("{}", String::from_utf8_lossy(&buffer[..]));
+    // println!("{}", String::from_utf8_lossy(&buffer[..]));
     let user = match memmem::find(&buffer[..], b"user=").map(|p| p as usize){
         Some(x) => x,
         None => {
@@ -551,14 +558,16 @@ fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
 
     let status_line = "HTTP/1.1 200 OK\r\n";
     let site = web(&buffer[..]);
-    if(!memmem::find(site.as_bytes(), b"<html>").map(|p| p as usize).is_some()){
+    println!("site thats giving me problems:\n{}", site);
+
+    if(!memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some()){
         send_error_response(&mut stream, 400, "There has been an error generating the webpage");
         return;
     }
 
     let response = format!("{}Set-Cookie: Auth=\"user-{}-token\"; Path=/; HttpOnly; SameSite=Strict; Max-Age=3600\r\nLocation: /\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, user, site);
 
-    println!("\n\n\n\n\nresponse = \n{}", response);
+    // println!("\n\n\n\n\nresponse = \n{}", response);
     match stream.write(response.as_bytes()){
         Ok(x) => {println!("The authentification worked well"); x},
         Err(e) => {
@@ -640,7 +649,109 @@ fn get_boundary(buffer: &Vec<u8>) -> Option<Vec<u8>> {
     Some(boundary)
 }
 
+fn web_send_image(mut stream:TcpStream, buffer: Vec<u8>){
 
+    let file = match memmem::find(&buffer[..], b" HTTP/1.1").map(|p| p as usize){
+        Some(x) => x,
+        None => {
+            println!("Probably the request got corrupted");
+            send_error_response(&mut stream, 400, "The request got corrupted");
+            return;
+        }
+    };
+
+    let start = match memmem::find(&buffer, b"uploads").map(|p| p as usize){
+        Some(x) => x,
+        None => {
+            println!("Probably the request got corrupted bitch");
+            send_error_response(&mut stream, 400, "The request got corrupted");
+            return;
+        }
+    };
+    let name = String::from_utf8_lossy(&buffer[start..file]);
+    let mut file = match fs::File::open(&*name){
+        Ok(x) => x,
+        Err(e) => {
+            println!("File that was attempted to be opened: {}", name);
+            println!("There has been an error opening the image\n{}", e);
+            return;
+        }
+    };
+
+    let mut data = String::from(name.clone());
+    data.replace_range(.."uploads".len(), "data");
+    data.replace_range(data.len().., ".txt");
+
+    println!("image data: {}", data);
+    let mut data = match fs::File::open(data) { //why errorr??????????????????????//
+        Ok(x) => x,
+        Err(e) => {
+            println!("The data image file does not exist");
+            send_error_response(&mut stream, 400, "Unnabl
+            e to get the data for preview, the image does not exist");
+            return;
+        }
+    };
+
+    let buffer1 = name.as_bytes();
+    let filename = match  memmem::rfind(&buffer1, b"/").map(|p| p as usize){
+        Some(x) => x,
+        None => {
+            println!("ur seriously cooked if you get this error");
+            send_error_response(&mut stream, 400, "Ur cooked chat");
+            return;
+        }
+    };
+    let filename = &buffer1[filename..];
+    let mut content_type = String::new();
+    data.read_to_string(&mut content_type);
+
+    let mut read = Vec::new();
+    match file.read_to_end(&mut read){
+        Ok(x) => x,
+        Err(e) =>{
+            println!("uhm, the file cannot be read or no data is inside it\n{:?}", e);
+            send_error_response(&mut stream, 404, "There is a problem reading the data of your file");
+            return;
+        }
+    };  
+
+    let status_line = "HTTP/1.1 200 OK\r\n";
+    let response = format!(
+        "{}{}\r\nContent-DIsposition: W; filename = \"{}\"\r\nContent-Length: {}\r\n\r\n",
+        status_line,
+        content_type,
+        String::from_utf8_lossy(&filename[..]),
+        read.len()
+    );
+
+    println!("If this shit doesnt work imma tweak out");
+    match stream.write(response.as_bytes()){
+        Ok(x) => {println!("The authentification worked well"); x},
+        Err(e) => {
+            send_error_response(&mut stream, 400, "There was a problem responding");
+            println!("Failed to respond ig???");
+            return;
+        }
+    };
+    match stream.write(&read[..]){
+        Ok(x) => {println!("The authentification worked well"); x},
+        Err(e) => {
+            send_error_response(&mut stream, 400, "There was a problem responding");
+            println!("Failed to respond ig???");
+            return;
+        }
+    };
+    match stream.flush(){
+        Ok(x) => x,
+        Err(x) => {
+            send_error_response(&mut stream, 400, "How tf did this fail");
+            println!("Failed to respond ig???");
+            return;
+        }
+    };
+    return;
+} 
 
 fn parse_file<'a>(
     stream: &mut TcpStream,
@@ -753,7 +864,7 @@ fn parse_file<'a>(
         return Ok((
             content,
             std::str::from_utf8(content_type).unwrap_or("application/octet-stream"),
-            file,
+            file.replace(" ", "_"),
         ));
     }
     
@@ -821,12 +932,12 @@ fn parse_file<'a>(
     // upload filename =uploads/"What’s the craziest way you’ve seen someone get humbled_&#129300;.mp4"
     // Content-Type: video/mp4
 
-    println!("Parse Upload content = {:?}", String::from_utf8_lossy(&content[..]));
+    // println!("Parse Upload content = {:?}", String::from_utf8_lossy(&content[..]));
 
     Ok((
         content,
         std::str::from_utf8(content_type).unwrap_or("application/octet-stream"),
-        decode_Windows_1255(&filename[..]),
+        decode_Windows_1255(&filename[..]).replace(" ", "_"),
     ))
 }
 
@@ -849,7 +960,7 @@ fn post_action(mut stream: TcpStream, buffer: Vec<u8>, action: usize) {
         .map(|p| p as usize){
             Some(x) => x,
             None => {
-                println!("Nope, ur cooekd chat");
+                println!("Nope, ur cooked chat");
                 send_error_response(&mut stream, 400, "The file/request probably got corrupted during transmission");
                 return;
             }
@@ -1042,7 +1153,7 @@ fn rename_folder(mut stream: TcpStream, buffer: Vec<u8>, old_folder: String, new
     println!("\n\nDone with the POST RENAME_FOLDER action request my guy");
 
     let site = web(&buffer[..]);
-    if(!memmem::find(site.as_bytes(), b"<html>").map(|p| p as usize).is_some()){
+    if(!memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some()){
         send_error_response(&mut stream, 400, "There has been an error generating the webpage");
         return;
     }
@@ -1136,7 +1247,7 @@ fn delet(mut stream: TcpStream, filename: String, buffer: Vec<u8>) {
 
     println!("\n\nDone with the POST delete action request my guy");
     let site = web(&buffer[..]);
-    if(!memmem::find(site.as_bytes(), b"<html>").map(|p| p as usize).is_some()){
+    if(!memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some()){
         send_error_response(&mut stream, 400, "There has been an error generating the webpage");
         return;
     }
@@ -1396,7 +1507,7 @@ fn add_folder(mut stream: TcpStream, buffer: &[u8], filename: String) {
 
     let status_line = "HTTP/1.1 200 OK\r\n";
     let site = web(buffer);
-    if(!memmem::find(site.as_bytes(), b"<html>").map(|p| p as usize).is_some()){
+    if(!memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some()){
         send_error_response(&mut stream, 400, "There has been an error generating the webpage");
         return;
     }
@@ -1528,7 +1639,7 @@ fn add_file(
 
     println!("\n\nDone with the POST add_file request my guy");
     let site = web(buffer);
-    if(!memmem::find(site.as_bytes(), b"<html>").map(|p| p as usize).is_some()){
+    if(!memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some()){
         send_error_response(&mut stream, 400, "There has been an error generating the webpage");
         return;
     }
@@ -1578,6 +1689,9 @@ fn web(buffer: &[u8]) -> String {
             return String::from("");
         }
     };
+
+    println!("folder checking: {}", folder);
+    
     let mut file_names = Vec::new();
 
     let mut files = Vec::new();
@@ -1601,6 +1715,7 @@ fn web(buffer: &[u8]) -> String {
             }
         };
         println!("entry in bytes= {:?}", &file_name.clone().into_bytes()[..]);
+        println!("entry in string: {}", String::from_utf8_lossy(&file_name.clone().into_bytes()[..]));
         file_names.push(file_name);
     }
 
@@ -1702,6 +1817,9 @@ fn web(buffer: &[u8]) -> String {
     ");
 
     for i in 0..file_names.len() {
+
+        println!("file idfk: {}", files[0].display());
+
         if !files[i].is_file() {
             html.push_str(&*format!(
                 "<li>
@@ -1735,13 +1853,15 @@ fn web(buffer: &[u8]) -> String {
                 file_names[i]
             ));
         } else {
+            println!("file: {:?}", file_names[i]);
+            println!("filejs: {}", files[i].display());
+
             html.push_str(&*format!(
                 "<li> 
                     <h3>
                         {}
                     </h3>
                     <br>
-                    
                     <form action=\"/\" method =\"POST\">
                         <input type=\"hidden\" name=\"action\" value=\"DELETE\">
                         <input type=\"hidden\" name=\"filename\" value=\"{}\">
@@ -1752,9 +1872,10 @@ fn web(buffer: &[u8]) -> String {
                         <input type=\"hidden\" name=\"filename\" value=\"{}\">
                         <button type=\"submit\">DOWNLOAD</button>
                     </form>
+                    <img src={} alt =\"IDFK\" style=\"max-width: 400px\">
                     
                 </li>\n",
-                file_names[i], file_names[i], file_names[i]
+                file_names[i], file_names[i], file_names[i], files[i].display()
             ));
         }
     }
