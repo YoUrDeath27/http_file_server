@@ -1,7 +1,7 @@
 use delete::{delete_file, delete_folder};
 use htmlescape::decode_html;
 use memchr::memmem;
-use percent_encoding::percent_decode_str;
+use percent_encoding::{percent_decode_str, percent_encode, utf8_percent_encode, AsciiSet, CONTROLS};
 use std::{
     fs,
     io::Error,

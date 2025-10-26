@@ -223,7 +223,7 @@ pub fn parse_file<'a>(
     Ok((
         content,
         std::str::from_utf8(content_type).unwrap_or("application/octet-stream"),
-        decode_Windows_1255(&filename[..]).replace(" ", "_"),
+        decode_Windows_1255(&filename[..]).replace(" ", "_"), //i think i should repplace this with encode_percent or smth so " " -> %20
     ))
 }
 

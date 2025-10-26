@@ -1,5 +1,5 @@
 use super::*;
-
+use bcrypt::{DEFAULT_COST, hash, verify};
 
 pub fn auth_user(mut stream: TcpStream, buffer: Vec<u8>) {
     let name =  match memmem::find(&buffer[..], b"account=").map(|p| p as usize){
@@ -39,7 +39,7 @@ pub fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
     let user = match memmem::find(&buffer[..], b"user=").map(|p| p as usize){
         Some(x) => x,
         None => {
-            send_error_response(&mut stream, 510, "-Holy fucking shit, You are the bay harbout butcher<br>-I never liked that nickname");
+            send_error_response(&mut stream, 510, "-Holy fucking shit, You are thvere bay harbout butcher<br>-I never liked that nickname");
             println!("Dexter reference activated 2");
             return;
         }
@@ -60,11 +60,11 @@ pub fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
     let pass = match memmem::find(&buffer[..], b"password=").map(|p| p as usize){
         Some(x) => x,
         None => {
-            send_error_response(&mut stream, 510, "You gotta be joking with me");
+            send_error_response(&mut stream, 510, "You gotta be jorking with me");
             println!("Bruh");
             return;
         }
-    };;
+    };
     let pass = &buffer[pass + "password=".len()..];
     let pass = String::from_utf8_lossy(&pass[..]);
 
@@ -84,7 +84,18 @@ pub fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
         file.read_to_end(&mut text);
     }
 
-    let search = format!("{}: {} ",user, pass);
+    let hashed_pass = match hash(&*pass, DEFAULT_COST).map_err(|e| {
+                    eprintln!("Failed to hash password: {}", e);
+                    send_error_response(&mut stream, 500, "Failed to log in with this password");
+                }){
+                    Ok(x) => x,
+                    Err(e) => {
+                        eprintln!("Failed to hash the password somehow: {:?}", e);
+                        send_error_response(&mut stream, 500, "Failed to find account");
+                        return;
+                    }
+                };
+    let search = format!("{}: {} ",user, hashed_pass);
     let search = search.as_bytes();
 
 
@@ -170,7 +181,20 @@ pub fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
                             send_error_response(&mut stream, 500, "Server configuration error");
                             return;
                         }
-                    };
+                    }; 
+
+                //hashing the password
+                let pass = match hash(&*pass, DEFAULT_COST).map_err(|e| {
+                    eprintln!("Failed to hash password: {}", e);
+                    send_error_response(&mut stream, 500, "Failed to create account");
+                }){
+                    Ok(x) => x,
+                    Err(e) => {
+                        eprintln!("Failed to hash the password somehow: {:?}", e);
+                        send_error_response(&mut stream, 500, "Failed to create account");
+                        return;
+                    }
+                };
 
                 match writeln!(file, "{}: {} ", user, pass)
                 .map_err(|e| {

@@ -1,1 +1,2 @@
-augu: augu 
+augu: augu  
+sigma: $2b$12$QPPj4DbRFsKpcCQVxsXytOqXKaxFCZPy.kjDDp7UtxcH1dGiMZbYO 

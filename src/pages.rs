@@ -144,6 +144,29 @@ pub fn web(buffer: &[u8]) -> String {
         li > div:nth-child(2) {
             margin:0 0 0 50px;
         }
+
+        .options_file, .options_folder {
+            background: none;
+            border: none;
+            font-size: 10rem;
+            position: relative;
+        }
+
+        #options {
+            background-color: lightgrey;
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .options::nth-child(1) {
+            display: flex;
+        }
+
+        .options_file:hover, .options_folder:hover {
+            color: blue;
+            cursor: pointer;
+        }
+
     </style>
 
     <body>
@@ -202,7 +225,8 @@ pub fn web(buffer: &[u8]) -> String {
 
     for i in 0..file_names.len() {
 
-        println!("file idfk: {}", files[0].display());
+        println!("file idfk: {}", files[i].display());
+        println!("file_names length: {}", file_names.len());
 
         if !files[i].is_file() {
             html.push_str(&*format!(
@@ -210,26 +234,35 @@ pub fn web(buffer: &[u8]) -> String {
                     <h3>
                         {}
                     </h3>
-                    <form action=\"/\" method =\"POST\">
-                        <input type=\"hidden\" name=\"action\" value=\"DELETE\">
-                        <input type=\"hidden\" name=\"folder\" value=\"{}\">
-                        <input type=\"hidden\" name=\"filename\" value=\"{}\">
-                        <button type=\"submit\">Delete</button>
-                    </form>
-                    <form action=\"/\" method =\"POST\">
-                        <input type=\"hidden\" name=\"action\" value=\"RENAME_FOLDER\">
-                        <input type=\"hidden\" name=\"filename\" value=\"{}\">
-                        <input type=\"text\" name=\"newFile\">
-                        <button type=\"submit\">Rename</button>
-                    </form>
-                    <form action=\"/\" method=\"POST\">
-                        <input type=\"hidden\" name=\"action\" value=\"DOWNLOAD_FOLDER\">
-                        <input type=\"hidden\" name=\"filename\" value=\"{}\">
-                        <button type=\"submit\">Download as ZIP</button>
-                    </form>
-                    <button onclick=\"window.location.href='/open_folder/{}'\">Open folder</button>
+                    <br>
+                    <button class=\"options_folder\" id=\"{}\"  onclick=\"open_folder_options(this)\"> 
+                        <span> &#8942; </span>
+                    </button>
+                    <div id=\"options\" style=\"display: none; z-index: 10\">
+                        <div style=\"display: block;  margin:0 10px 0 0;\">
+                            <form action=\"/\" method =\"POST\">
+                                <input type=\"hidden\" name=\"action\" value=\"DELETE\">
+                                <input type=\"hidden\" name=\"folder\" value=\"{}\">
+                                <input type=\"hidden\" name=\"filename\" value=\"{}\">
+                                <button type=\"submit\">Delete</button>
+                            </form>
+                            <form action=\"/\" method =\"POST\">
+                                <input type=\"hidden\" name=\"action\" value=\"RENAME_FOLDER\">
+                                <input type=\"hidden\" name=\"filename\" value=\"{}\">
+                                <input type=\"text\" name=\"newFile\">
+                                <button type=\"submit\">Rename</button>
+                            </form>
+                            <form action=\"/\" method=\"POST\">
+                                <input type=\"hidden\" name=\"action\" value=\"DOWNLOAD_FOLDER\">
+                                <input type=\"hidden\" name=\"filename\" value=\"{}\">
+                                <button type=\"submit\">Download as ZIP</button>
+                            </form>
+                        </div>
+                        <button onclick=\"window.location.href='/open_folder/{}'\">Open folder</button>
+                    </div>
                 </li>",
                 file_names[i],
+                i,
                 file_names[i],
                 file_names[i],
                 file_names[i],
@@ -246,17 +279,27 @@ pub fn web(buffer: &[u8]) -> String {
                         {}
                     </h3>
                     <br>
-                    <form action=\"/\" method =\"POST\">
-                        <input type=\"hidden\" name=\"action\" value=\"DELETE\">
-                        <input type=\"hidden\" name=\"filename\" value=\"{}\">
-                        <button type=\"submit\">Delete</button>
-                    </form>
-                    <form action=\"/\" method =\"POST\">
-                        <input type=\"hidden\" name=\"action\" value=\"DOWNLOAD\">
-                        <input type=\"hidden\" name=\"filename\" value=\"{}\">
-                        <button type=\"submit\">DOWNLOAD</button>
-                    </form>",
-                file_names[i], file_names[i], file_names[i]
+                    <button class=\"options_file\" onclick=\"open_file_options(this)\" id=\"{}\"> 
+                        <span> &#8942; </span>
+                    </button>
+                    <div id=\"options\" style=\"display:none; z-index: 10\">
+                        <div style=\"margin:0 10px 0 0;\">
+                            <form action=\"/\" method =\"POST\">
+                                <input type=\"hidden\" name=\"action\" value=\"DELETE\">
+                                <input type=\"hidden\" name=\"filename\" value=\"{}\">
+                                <button type=\"submit\"> Delete </button>
+                            </form>
+                            <form action=\"/\" method =\"POST\">
+                                <input type=\"hidden\" name=\"action\" value=\"DOWNLOAD\">
+                                <input type=\"hidden\" name=\"filename\" value=\"{}\">
+                                <button type=\"submit\"> DOWNLOAD </button>
+                            </form>
+                        </div>
+                    ",
+                file_names[i], 
+                i, 
+                file_names[i], 
+                file_names[i]
             ));
             let mut content_type_file = match fs::File::open(data_files[i].clone()){
                 Ok(x) => x,
@@ -273,21 +316,25 @@ pub fn web(buffer: &[u8]) -> String {
 
             if Image_Types.contains(&&*c_type) {
                 html.push_str(&format!("
-                    <img src={} alt =\"IDFK\" style=\"max-width: 300px\">",
+                    <img src={} alt =\"IDFK\" style=\"max-width: 300px; \" >",
                     files[i].display()
-                ))
+                ));
+                println!("image showing");
             } //then check for videos, text and all the other
-            if Video_Types.contains(&&*c_type) {
-                html.push(&format!("
+            else if Video_Types.contains(&&*c_type) { //why tf is this not working?
+                html.push_str(&format!("
                     <video width=\"300\" height =\"240\" controls>
                         <source src=\"{}\" type=\"{}\">
                         Your browser doesnt support my video :'(
                     </video>
                 ",  files[i].display(),
                     c_type
-                ))
+                ));
+                println!("Video showing");
             }
-            html.push_str("<li>\n")
+            html.push_str("</div>
+                            <li>\n
+                        ");
         }
     }
 
@@ -295,8 +342,35 @@ pub fn web(buffer: &[u8]) -> String {
         "
         </ul>
         </body>
-        </html>",
-    );
+        <script>
+
+        function open_file_options(file){
+            console.log(file);
+            console.log(file.id);
+            if (document.getElementById(file.id).parentElement.children[3].style.display  == \"none\") {
+                let button = document.getElementById(file.id);
+                button.parentElement.children[3].style.display = 'flex';
+                //button.parentElement.children[3].children[0].children[2].style.display = 'none';
+                //button.parentElement.children[3].children[1].children[2].style.display = 'none';
+                //button.parentElement.children[3].children[2].style.display = 'none';
+            } else {
+                let button = document.getElementById(file.id);
+                button.parentElement.children[3].style.display = 'none';
+
+            }
+        }
+        function open_folder_options(folder){
+            console.log(folder);
+            let button = document.getElementById(folder.id);
+            if(button.parentElement.children[3].style.display == 'none') {
+                button.parentElement.children[3].style.display = 'flex';
+            } else {
+                button.parentElement.children[3].style.display = 'none';
+            }
+        }
+        </script>
+        </html>"
+        );
 
     return html;
 }
