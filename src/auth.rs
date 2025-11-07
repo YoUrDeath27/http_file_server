@@ -85,16 +85,16 @@ pub fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
     }
 
     let hashed_pass = match hash(&*pass, DEFAULT_COST).map_err(|e| {
-                    eprintln!("Failed to hash password: {}", e);
-                    send_error_response(&mut stream, 500, "Failed to log in with this password");
-                }){
-                    Ok(x) => x,
-                    Err(e) => {
-                        eprintln!("Failed to hash the password somehow: {:?}", e);
-                        send_error_response(&mut stream, 500, "Failed to find account");
-                        return;
-                    }
-                };
+        eprintln!("Failed to hash password: {}", e);
+        send_error_response(&mut stream, 500, "Failed to log in with this password");
+    }){
+        Ok(x) => x,
+        Err(e) => {
+            eprintln!("Failed to hash the password somehow: {:?}", e);
+            send_error_response(&mut stream, 500, "Failed to find account");
+            return;
+        }
+    };
     let search = format!("{}: {} ",user, hashed_pass);
     let search = search.as_bytes();
 
@@ -105,9 +105,8 @@ pub fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
     println!("pass = {:?}", pass);
     println!("search = {:?}", String::from_utf8_lossy(&search[..]));
     println!("\n\n\n\n\n");
-    
 
-    // check if the person is in the file 
+    // check if the person is in the file
     // else add user and pass
     // but if user is but pass isnt
     // make the user retry pass
@@ -123,31 +122,51 @@ pub fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
             println!("search_boundary = {:?}", String::from_utf8_lossy(&search_boundary[..])); 
             println!("search = {:?}", String::from_utf8_lossy(&search[..])); 
 
+            //aici verifica daca hashed pass = unhashed pass 
+
+            let stored_pass = match memmem::find(&search_boundary[..], b": ").map(|p| p as usize){
+                Some(x) => x,
+                None => {
+                    send_error_response(&mut stream, 500, "There is a problem with the users database, please try again later");
+                    println!("There is a problem with the users database, please try again later");
+                    return;
+                }
+            }; //hashed pass
+
+            let username = String::from_utf8_lossy(&search_boundary[..stored_pass]); //username
+            let stored_pass = String::from_utf8_lossy(&search_boundary[stored_pass + 2.. search_boundary.len() - 1]); //hashed pass
+            let unhashed_pass = pass; 
+
+            println!("stored_pass = {:?}", stored_pass);
+            println!("unhashed_pass = {:?}", unhashed_pass);
+            println!("hashed_pass = {:?}", hashed_pass);
+
             //if the password doesnt match with the username
-            if !(search_boundary == search) {
-                let status_line =  "HTTP/1.1 200 OK\r\n";
-                let response = format!("{}{}",status_line, password(user.to_string(), Some("try to remember the password u used when creating this account")));
-        
-                match stream.write(response.as_bytes()){
-                    Ok(x) => {println!("The authentification worked well"); x},
-                    Err(e) => {
-                        send_error_response(&mut stream, 400, "There was a problem responding");
-                        println!("Failed to respond ig???");
-                        return;
-                    }
-                };
-                match stream.flush(){
-                    Ok(x) => x,
-                    Err(x) => {
-                        send_error_response(&mut stream, 400, "How tf did this fail");
-                        println!("Failed to respond ig???");
-                        return;
-                    }
-                };
+            if !(match verify(&*unhashed_pass, &stored_pass){ //make this a smaller function trust me
+                Ok(x) => x,
+                Err(e) => {
+                    eprintln!("Failed to verify password: {}\n\n", e);
+                    false
+            }
+            }) {
+                incorrect_pass(&mut stream, &username);
                 return;
             } 
-            //else if it matches do nothing
-            ()
+            //IF THEY MATCH 
+            {
+                let mut attempts = match USERS_ATTEMPTS.lock(){
+                    Ok(x) => x,
+                    Err(e) => {
+                        println!("cant identify the user from the attempts mutex\n{:?}", e);
+                        send_error_response(&mut stream, 500, "There is a problem that we dont know how u got here");
+                        return;
+                    }
+                };
+                let (count, locked_until) = attempts.entry(username.to_string()).or_insert((0, None));
+                *count = 0;
+            }
+
+                //else if it matches do nothing
         },
         None => {
             //if the user doesnt exist create it
@@ -208,11 +227,12 @@ pub fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
                         return;
                     }
                 };
+                return;
             };
-            ()
-        }, //do some shit
-        //add user with pass
-    }     
+        },
+    } //do some shit
+      //add user with pass
+         
     //if the user and pass match show the corresponding 
 
 
@@ -237,11 +257,8 @@ pub fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
         }
     }
 
-    
-
     let status_line = "HTTP/1.1 200 OK\r\n";
     let site = web(&buffer[..]);
-    println!("site thats giving me problems:\n{}", site);
 
     if(!memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some()){
         send_error_response(&mut stream, 400, "There has been an error generating the webpage");
@@ -263,6 +280,114 @@ pub fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
         Ok(x) => x,
         Err(x) => {
             send_error_response(&mut stream, 400, "How tf did this fail");
+            println!("Failed to respond ig???");
+            return;
+        }
+    };
+}
+fn failed_attempt(status_line: &str, user: &str, time: f32) -> String{
+    println!("User 2 {} has been temporarily blocked for {} seconds due to too many failed login attempts", user, time );
+    format!("{}Content-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, password(user.to_string(), Some( &format!("You have been temporarily blocked for {} minutes due to too many failed login attempts for now", time / 60.0))))
+    
+}
+
+fn incorrect_pass(stream: &mut TcpStream, username: &str) {
+    let status_line =  "HTTP/1.1 200 OK\r\n";
+    let mut response = format!("{}Content-Type: text/html; charset=UTF-8\r\n\r\n{}",status_line, password(username.to_string(), Some("try to remember the password u used when creating this account you fucking bitch")));
+    //store here the user and amount of failed attempts
+
+    let mut attempts;
+    {
+        attempts = match USERS_ATTEMPTS.lock(){
+            Ok(x) => x,
+            Err(e) => {
+                println!("cant identify the user from the attempts mutex\n{:?}", e);
+                send_error_response(stream, 500, "There is a problem that we dont know how u got here");
+                return;
+            }
+        };
+    }
+
+    println!("Username that should exist: {:?}", username);
+    println!("Let's see who tried to connect: {:?}", attempts.iter().collect::<Vec<_>>()); 
+
+    let (count, locked_until) = attempts.entry(username.to_string()).or_insert((0, None));
+    /* 
+        this shit kinda works 
+        keep testing it to make sure
+    */
+
+    println!("The user's attempt: {}", *count);
+
+    let continues = match locked_until {
+        Some(t) => true,
+        None => false,
+    };
+
+    let time_remaining = match *count {//it increments later
+        0 => 0,
+        1 => 0,
+        2 => 30,
+        3 => 60,
+        4 => 120,
+        5 => 300,
+        6 => 900,
+        7 => 1800,
+        8 => 3600,
+        9 => 7200,
+        10 => 14400,
+        11 => 28800,
+        12 => 57600,
+        _ => 18446744073709551615, //good luck recovering you accoutn bozo
+    };
+    // solve this bullshit tmrw
+    
+    if *locked_until == None {
+
+        *count += 1;
+        match (*count){
+            1 => {
+                println!("hopa, slipped once");
+                response = format!("{}Content-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, password(username.to_string(), Some("You have 2 attempts left before you are timed out"))); 
+            },
+            2 => {
+                println!("Hopa, slipped twice");
+                response = format!("{}Content-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, password(username.to_string(), Some("You have 1 attempt left before you are timed out"))); 
+            },
+            _ => {
+                println!("Time now {} vs time i should unlock {:?}", time_remaining, Instant::now() + Duration::from_secs(time_remaining));
+                if(*count >= 12){
+                    println!("RIP FUCKING BOZOOOOOOOOOOOOOOOOOO");
+                }
+                *locked_until = Some(Instant::now() + Duration::from_secs(time_remaining));
+            }
+        }
+    }
+
+    if let Some(unlock_time) = locked_until {
+        if Instant::now() < *unlock_time {
+            let remaining = unlock_time.duration_since(Instant::now()).as_secs();
+            response = failed_attempt(status_line, &username, (remaining) as f32);
+        }
+        else {
+            *locked_until = None;
+            //counter se reseteaza doar atunci cand parola este corecta
+        }
+    }///IT COMPILESSSS
+
+    match stream.write(response.as_bytes()){
+        Ok(x) => {println!("The response for failed attempt worked well"); x},
+        Err(e) => {
+            send_error_response(stream, 400, "There was a problem responding");
+            println!("Failed to respond ig???");
+            return;
+        }
+    };
+
+    match stream.flush(){
+        Ok(x) => x,
+        Err(x) => {
+            send_error_response(stream, 400, "How tf did this fail");
             println!("Failed to respond ig???");
             return;
         }

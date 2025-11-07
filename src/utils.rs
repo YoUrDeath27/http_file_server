@@ -2,6 +2,7 @@ use super::*;
 
 lazy_static!{
     pub static ref SHOW_FOLDER: Mutex<String> = Mutex::new(String::from(""));
+    pub static ref USERS_ATTEMPTS: Mutex<HashMap<String, (u32, Option<Instant>)>> = Mutex::new(HashMap::new());
 }
 
 pub fn decode_Windows_1255(bytes: &[u8]) -> String{
@@ -228,6 +229,7 @@ pub fn parse_file<'a>(
 }
 
 pub const MAX_UPLOAD_SIZE: usize = 40 * 1024 * 1024; // 40MB
+
 pub const ALLOWED_MIME_TYPES: &[&str] = &[
     "audio/wav",
     "audio/mp3",

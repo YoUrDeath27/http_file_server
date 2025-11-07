@@ -15,4 +15,5 @@ walkdir = "2.5"  # For recursive directory traversal
 
 encoding = "0.2"
 bcrypt = "0.17"
+serde = "1.0.228"
 

@@ -1,2 +1,3 @@
-augu: augu  
-sigma: $2b$12$QPPj4DbRFsKpcCQVxsXytOqXKaxFCZPy.kjDDp7UtxcH1dGiMZbYO 
+augu: $2b$12$UX/ph7Ll/LLsMAr/XyBCm.LQWo0SOcDMyN8n4rrbc.BOoROPC.o.K  
+sigma: $2b$12$LkNUPSN5Yq.To9nE5y5gL.yiyKgRrpg6QEkCieLbP75ndnVPpqGY. 
+0: $2b$12$iqGpu.gpDd/OrZK0eFY6JOoJta7XaGnPTL3Ir5CxYVrM7/kh06aM. 

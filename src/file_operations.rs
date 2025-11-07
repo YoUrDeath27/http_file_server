@@ -198,7 +198,7 @@ pub fn rename_folder(mut stream: TcpStream, buffer: Vec<u8>, old_folder: String,
 
 pub fn delet(mut stream: TcpStream, filename: String, buffer: Vec<u8>) {
         
-        {
+        { 
         let mut folder = match SHOW_FOLDER.lock(){
             Ok(x) => x,
             Err(e) => {
