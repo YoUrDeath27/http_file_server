@@ -91,8 +91,8 @@ fn main() {
         }
     }
 }
-
-struct Request<'a>{
+#[derive(Clone, Debug)]
+pub struct Request<'a>{
     header: &'a Vec<u8>,
     body: Option<Vec<u8>>
 }
@@ -178,13 +178,14 @@ fn handle_connection(mut stream: TcpStream) {
         if finished{ //
         println!("header: {}\n\n\n", String::from_utf8_lossy(&request.header[..]));
         // println!("body: {}\n\n\n", String::from_utf8_lossy(&request.body.as_ref().unwrap().clone()[..]));
+        println!("Finished the request: {:?}", String::from_utf8_lossy(&received_data[..]));
 
             if !memmem::find(&request.header, b"../").is_some(){
                 if is_get && bytes_read < buffer.len() {
-                    get_method(stream, received_data);
+                    get_method(stream, request);
                 }
                 else if is_post && bytes_read < buffer.len() {
-                    post_method(stream, received_data);
+                    post_method(stream, request);
                 }
             } else {
                 send_error_response(&mut stream, 400, "Did you actually thought you can do this?");
@@ -194,10 +195,10 @@ fn handle_connection(mut stream: TcpStream) {
     }
 }
 
-fn get_method(mut stream: TcpStream, buffer: Vec<u8>) {
-    let buffer = &buffer[..];
+fn get_method(mut stream: TcpStream, request: Request) {
+    // let buffer = &request.body.as_ref().unwrap()[..];
 
-    let connected = if let Some(_) = memmem::find(&buffer[..], b"Cookie: Auth").map(|p| p as usize) {
+    let connected = if let Some(_) = memmem::find(&request.header[..], b"Cookie: Auth").map(|p| p as usize) {
         true
     }   else {
         false
@@ -212,7 +213,7 @@ fn get_method(mut stream: TcpStream, buffer: Vec<u8>) {
 
         stream.write(response.as_bytes());
         stream.flush();
-    }else if buffer[..6] == *b"GET / " && connected == true{
+    }else if request.header[..6] == *b"GET / " && connected == true{
         let status_line = "HTTP/1.1 200 OK\r\n";
         {
             let mut folder = match SHOW_FOLDER.lock() {
@@ -222,20 +223,20 @@ fn get_method(mut stream: TcpStream, buffer: Vec<u8>) {
                     return;
                 },
             };
-            let user = match memmem::find(buffer, b"Cookie: Auth=\"user-").map(|p| p as usize){
+            let user = match memmem::find(request.header, b"Cookie: Auth=\"user-").map(|p| p as usize){
                 Some(x) => x,
                 None => {
                     send_error_response(&mut stream, 400, "I think you broke something in here");
                     return;
                 },
             };
-            let end = memmem::find(buffer, b"-token").map(|p| p as usize).unwrap();
-            let user = &buffer[user + "Cookie: Auth=\"user-".len() ..end];
+            let end = memmem::find(request.header, b"-token").map(|p| p as usize).unwrap();
+            let user = &request.header[user + "Cookie: Auth=\"user-".len() ..end];
             *folder = String::from_utf8_lossy(&user[..]).to_string(); //wtffffffff
         }
         println!("Done with the normal GET request my guy");
 
-        let site = web(&buffer[..]);
+        let site = web(request);
         if(!memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some()){
             send_error_response(&mut stream, 400, "There has been an error generating the webpage");
             return;
@@ -251,10 +252,10 @@ fn get_method(mut stream: TcpStream, buffer: Vec<u8>) {
         }
 
 
-    } else if memmem::find(&buffer, b"/uploads/").is_some(){ //for previews
+    } else if memmem::find(&request.header, b"/uploads/").is_some(){ //for previews
         //for images
-        web_send_image(stream, buffer.to_vec());
-    } else if buffer[..19] == *b"GET /open_folder../" { //for back traversal
+        web_send_image(stream, request);
+    } else if request.header[..19] == *b"GET /open_folder../" { //for back traversal
         // go back one folder (somehow) work on this shit
         println!("We got this chat");
         let status_line = "HTTP/1.1 200 OK\r\n";
@@ -281,7 +282,7 @@ fn get_method(mut stream: TcpStream, buffer: Vec<u8>) {
             *folder = parent.display().to_string();
         }
 
-        let site = web(&buffer[..]);
+        let site = web(request);
         if(!memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some()){
             send_error_response(&mut stream, 400, "There has been an error generating the webpage");
             return;
@@ -298,14 +299,14 @@ fn get_method(mut stream: TcpStream, buffer: Vec<u8>) {
         } 
 
         
-    } else if buffer[..17] == *b"GET /open_folder/"{
+    } else if request.header[..17] == *b"GET /open_folder/"{
 
         // println!("buffer = {}", String::from_utf8_lossy(&buffer[..]));
         let status_line = "HTTP/1.1 200 OK\r\n"; 
 
-        let mut end = memmem::find_iter(&buffer[..], b" ").map(|p| p as usize);
+        let mut end = memmem::find_iter(&request.header[..], b" ").map(|p| p as usize);
         let _ = end.next();
-        let inner = &buffer[b"GET /open_folder/".len()..end.next().unwrap()];
+        let inner = &request.header[b"GET /open_folder/".len()..end.next().unwrap()];
         let inner = String::from_utf8_lossy(&inner[..]);
         {    
             let mut folder = match SHOW_FOLDER.lock() {
@@ -327,7 +328,7 @@ fn get_method(mut stream: TcpStream, buffer: Vec<u8>) {
 
         println!("Done with the GET request my guy");
     
-        let site = web(&buffer[..]);
+        let site = web(request);
         if(!memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some()){
             send_error_response(&mut stream, 400, "There has been an error generating the webpage");
             return;
@@ -345,20 +346,20 @@ fn get_method(mut stream: TcpStream, buffer: Vec<u8>) {
     }   
 }
 
-fn post_method(mut stream: TcpStream, buffer: Vec<u8>) {
-    if let Some(action) = memmem::find(&buffer[..], b"action=").map(|p| p as usize) {
+fn post_method(mut stream: TcpStream, buffer: Request) {
+    if let Some(action) = memmem::find(&buffer.body.clone().unwrap()[..], b"action=").map(|p| p as usize) {
         post_action(stream, buffer, action);
-    } else if let Some(_) = memmem::find(&buffer[..], b"account=").map(|p| p as usize){
+    } else if let Some(_) = memmem::find(&buffer.body.clone().unwrap()[..], b"account=").map(|p| p as usize){
         auth_user(stream, buffer);
-    } else if let Some(_) = memmem::find(&buffer[..], b"password=").map(|p| p as usize) {
+    } else if let Some(_) = memmem::find(&buffer.body.clone().unwrap()[..], b"password=").map(|p| p as usize) {
         auth_pass(stream, buffer);
     } else {
         upload_file(stream, buffer);
     }
 }
 
-fn post_action(mut stream: TcpStream, buffer: Vec<u8>, action: usize) {
-        let data = &buffer[action + "action=".len()..];
+fn post_action(mut stream: TcpStream, buffer: Request, action: usize) {
+        let data = &buffer.body.clone().unwrap()[action + "action=".len()..];
         let mut end = memmem::find_iter(data, b"&").map(|p| p as usize);
         let end1 = match end.next(){
             Some(x) => x,
@@ -402,12 +403,11 @@ fn post_action(mut stream: TcpStream, buffer: Vec<u8>, action: usize) {
             delet(stream, filename, buffer);
         } else if action[..] == *b"ADD_FOLDER" {
             println!("Added a folder");
-            add_folder(stream, &buffer[..], filename);
+            add_folder(stream, buffer, filename);
         } else if action[..] == *b"DOWNLOAD" {
             println!("Downloaded a file");
             download(stream, filename, buffer);
         } else if action[..] == *b"RENAME_FOLDER" {
-
             let end2 = match end.next(){
                 Some(x) => x,
                 None => {

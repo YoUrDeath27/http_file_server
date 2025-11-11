@@ -1,8 +1,8 @@
 use super::*;
 use bcrypt::{DEFAULT_COST, hash, verify};
 
-pub fn auth_user(mut stream: TcpStream, buffer: Vec<u8>) {
-    let name =  match memmem::find(&buffer[..], b"account=").map(|p| p as usize){
+pub fn auth_user(mut stream: TcpStream, buffer: Request) {
+    let name =  match memmem::find(&buffer.body.clone().unwrap()[..], b"account=").map(|p| p as usize){
         Some(x) => x,
         None => {
             send_error_response(&mut stream, 510, "-How did you find me?<br>-GPS tapped on your FUCKING boat");
@@ -10,7 +10,7 @@ pub fn auth_user(mut stream: TcpStream, buffer: Vec<u8>) {
             return;
         }
     };
-    let name = &buffer[name + "account=".len()..];
+    let name = &buffer.body.clone().unwrap()[name + "account=".len()..];
     let name = String::from_utf8_lossy(&name[..]);
 
     let status_line = "HTTP/1.1 200 OK\r\n";
@@ -34,9 +34,8 @@ pub fn auth_user(mut stream: TcpStream, buffer: Vec<u8>) {
     };
 }
 
-pub fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
-    // println!("{}", String::from_utf8_lossy(&buffer[..]));
-    let user = match memmem::find(&buffer[..], b"user=").map(|p| p as usize){
+pub fn auth_pass(mut stream: TcpStream, buffer: Request) {
+    let user = match memmem::find(&buffer.body.clone().unwrap()[..], b"user=").map(|p| p as usize){
         Some(x) => x,
         None => {
             send_error_response(&mut stream, 510, "-Holy fucking shit, You are thvere bay harbout butcher<br>-I never liked that nickname");
@@ -44,7 +43,7 @@ pub fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
             return;
         }
     };
-    let user = &buffer[user + "user=".len()..];
+    let user = &buffer.body.clone().unwrap()[user + "user=".len()..];
     let end = match memmem::find(&user[..], b"&").map(|p| p as usize){
         Some(x) => x,
         None => {
@@ -57,7 +56,7 @@ pub fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
 
     let user = String::from_utf8_lossy(&user[..]);
 
-    let pass = match memmem::find(&buffer[..], b"password=").map(|p| p as usize){
+    let pass = match memmem::find(&buffer.body.clone().unwrap()[..], b"password=").map(|p| p as usize){
         Some(x) => x,
         None => {
             send_error_response(&mut stream, 510, "You gotta be jorking with me");
@@ -65,7 +64,7 @@ pub fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
             return;
         }
     };
-    let pass = &buffer[pass + "password=".len()..];
+    let pass = &buffer.body.clone().unwrap()[pass + "password=".len()..];
     let pass = String::from_utf8_lossy(&pass[..]);
 
     let mut text = Vec::new();
@@ -258,7 +257,7 @@ pub fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
     }
 
     let status_line = "HTTP/1.1 200 OK\r\n";
-    let site = web(&buffer[..]);
+    let site = web(buffer);
 
     if(!memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some()){
         send_error_response(&mut stream, 400, "There has been an error generating the webpage");
@@ -285,6 +284,7 @@ pub fn auth_pass(mut stream: TcpStream, buffer: Vec<u8>) {
         }
     };
 }
+
 fn failed_attempt(status_line: &str, user: &str, time: f32) -> String{
     println!("User 2 {} has been temporarily blocked for {} seconds due to too many failed login attempts", user, time );
     format!("{}Content-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, password(user.to_string(), Some( &format!("You have been temporarily blocked for {} minutes due to too many failed login attempts for now", time / 60.0))))

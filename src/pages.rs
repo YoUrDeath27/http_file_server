@@ -1,6 +1,6 @@
     use super::*;
 
-    pub fn web(buffer: &[u8]) -> String {
+    pub fn web(buffer: Request) -> String {
         let folder = match SHOW_FOLDER.lock(){
                 Ok(x) => x,
                 Err(e) => {
@@ -184,10 +184,10 @@
         </form> "
         );
         
-        if let Some(user) =  memmem::find(buffer, b"Cookie: Auth=\"user-").map(|p| p as usize) {
+        if let Some(user) =  memmem::find(&buffer.header[..], b"Cookie: Auth=\"user-").map(|p| p as usize) {
             
             let folder = &*folder.as_bytes();
-            let user = &buffer[user + "Cookie: Auth=\"user-".len() ..];
+            let user = &buffer.header[user + "Cookie: Auth=\"user-".len() ..];
             let end = match memmem::find(user, b"-token").map(|p| p as usize){
                 Some(x) => x,
                 None => {

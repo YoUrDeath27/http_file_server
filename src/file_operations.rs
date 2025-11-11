@@ -1,9 +1,8 @@
 use super::*;
 
-pub fn upload_file(mut stream: TcpStream, buffer: Vec<u8>) {
-    // println!("buffer in upload_file={}", String::from_utf8_lossy(&buffer[..]));
+pub fn upload_file(mut stream: TcpStream, buffer: Request) {
 
-    let boundary = match get_boundary(&buffer) {
+    let boundary = match get_boundary(&buffer.header[..].to_vec()) {
         Some(b) => b,
         None => {
             send_error_response(&mut stream, 400, "Invalid request format");
@@ -11,11 +10,10 @@ pub fn upload_file(mut stream: TcpStream, buffer: Vec<u8>) {
         }
     };
 
-    let buffer = &buffer[..];
-
     // println!("boundary={}", String::from_utf8_lossy(&boundary[..]));
 
-    let (content, content_type, filename) = match parse_file(&mut stream, buffer, &boundary) {
+    let mut buffer1 = buffer.clone();
+    let (content, content_type, filename) = match parse_file(&mut stream, &mut buffer1, &boundary) {
         Ok(data) => data,
         Err(e) => {
             send_error_response(&mut stream, 400, &format!("Failed to parse request, {}", e));
@@ -29,7 +27,7 @@ pub fn upload_file(mut stream: TcpStream, buffer: Vec<u8>) {
         return;
     }
 
-    if let Some(_) = memmem::find(buffer, b"name=\"folder\"").map(|p| p as usize) {
+    if let Some(_) = memmem::find(&buffer.body.clone().unwrap()[..], b"name=\"folder\"").map(|p| p as usize) {
         add_file_in_folder(stream, buffer, content, content_type, filename);
         return;
     }
@@ -144,7 +142,7 @@ fn zip_folder(folder_path: &Path, zip_path: &Path) -> Result<(), Box<dyn std::er
     Ok(())
 }
 
-pub fn rename_folder(mut stream: TcpStream, buffer: Vec<u8>, old_folder: String, new_folder: String) {
+pub fn rename_folder(mut stream: TcpStream, buffer: Request, old_folder: String, new_folder: String) {
     {
         let mut folder = match SHOW_FOLDER.lock(){
             Ok(x) => x,
@@ -171,7 +169,7 @@ pub fn rename_folder(mut stream: TcpStream, buffer: Vec<u8>, old_folder: String,
 
     println!("\n\nDone with the POST RENAME_FOLDER action request my guy");
 
-    let site = web(&buffer[..]);
+    let site = web(buffer);
     if(!memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some()){
         send_error_response(&mut stream, 400, "There has been an error generating the webpage");
         return;
@@ -196,7 +194,7 @@ pub fn rename_folder(mut stream: TcpStream, buffer: Vec<u8>, old_folder: String,
     };
 }
 
-pub fn delet(mut stream: TcpStream, filename: String, buffer: Vec<u8>) {
+pub fn delet(mut stream: TcpStream, filename: String, buffer: Request) {
         
         { 
         let mut folder = match SHOW_FOLDER.lock(){
@@ -213,9 +211,9 @@ pub fn delet(mut stream: TcpStream, filename: String, buffer: Vec<u8>) {
                         .to_owned();
         if &*folder1 != "" {
 
-            println!("\n\nbuffer={}", String::from_utf8_lossy(&buffer[..]));
-            if let Some(folder) = memmem::find(&buffer[..], b"folder=") {
-                let file = match memmem::find(&buffer[..], b"filename=")
+            println!("\n\nbuffer={}\n\n\n{}", String::from_utf8_lossy(&buffer.header[..]), String::from_utf8_lossy(&buffer.body.clone().unwrap()[..]));
+            if let Some(folder) = memmem::find(&buffer.body.clone().unwrap()[..], b"folder=") {
+                let file = match memmem::find(&buffer.body.clone().unwrap()[..], b"filename=")
                     .map(|p| p as usize) {
                         Some(x) => x, 
                         None => {
@@ -224,7 +222,7 @@ pub fn delet(mut stream: TcpStream, filename: String, buffer: Vec<u8>) {
                             return;
                         }
                     };
-                let file = &buffer[file + "filename=".len()..];
+                let file = &buffer.body.clone().unwrap()[file + "filename=".len()..];
                 let filename = String::from_utf8_lossy(&file[..]);
 
                 let filename = match percent_decode_str(&filename)
@@ -258,6 +256,7 @@ pub fn delet(mut stream: TcpStream, filename: String, buffer: Vec<u8>) {
             }
         } else {
             send_error_response(&mut stream, 403, "Somehow you are not logged in");
+            return;
         }
         
     }
@@ -265,7 +264,7 @@ pub fn delet(mut stream: TcpStream, filename: String, buffer: Vec<u8>) {
     let status_line = "HTTP/1.1 200 OK\r\n";
 
     println!("\n\nDone with the POST delete action request my guy");
-    let site = web(&buffer[..]);
+    let site = web(buffer);
     if(!memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some()){
         send_error_response(&mut stream, 400, "There has been an error generating the webpage");
         return;
@@ -289,7 +288,7 @@ pub fn delet(mut stream: TcpStream, filename: String, buffer: Vec<u8>) {
     };
 }
 
-pub fn download(mut stream: TcpStream, filename: String, buffer: Vec<u8>) {
+pub fn download(mut stream: TcpStream, filename: String, buffer: Request) {
     let entries = match fs::read_dir("uploads"){
         Ok(x) => x,
         Err(e) => {
@@ -469,9 +468,9 @@ pub fn download(mut stream: TcpStream, filename: String, buffer: Vec<u8>) {
     };
     // println!("filename={}", filename);
     
-}
+} 
 
-pub fn add_folder(mut stream: TcpStream, buffer: &[u8], filename: String) {
+pub fn add_folder(mut stream: TcpStream, buffer: Request, filename: String) {
     if filename.contains("../") {
         println!("Caught u red handed");
         println!("filename={}", filename);
@@ -552,12 +551,12 @@ pub fn add_folder(mut stream: TcpStream, buffer: &[u8], filename: String) {
 
 fn add_file_in_folder(
     mut stream: TcpStream,
-    buffer: &[u8],
+    buffer: Request,
     content: &[u8],
     content_type: &str,
     filename: String,
 ) {
-    let folder = match memmem::find(&buffer[..], b"name=\"folder\"").map(|p| p as usize) {
+    let folder = match memmem::find(&buffer.body.clone().unwrap()[..], b"name=\"folder\"").map(|p| p as usize) {
         Some(f) => f,
         None => {
             send_error_response(&mut stream, 404, "Folder not found");
@@ -566,7 +565,7 @@ fn add_file_in_folder(
     };
 
     println!("should add a file in da folder");
-    let folder = &buffer[folder + "name=\"folder\"".len() + "\r\n\r\n".len()..];
+    let folder = &buffer.body.clone().unwrap()[folder + "name=\"folder\"".len() + "\r\n\r\n".len()..];
 
     // println!("folder? = {}", String::from_utf8_lossy(&folder[..]));
     let end = match memmem::find(folder, b"\r\n").map(|p| p as usize){
@@ -591,7 +590,7 @@ fn add_file_in_folder(
 
 fn add_file(
     mut stream: TcpStream,
-    buffer: &[u8],
+    buffer: Request,
     content: &[u8],
     content_type: &str,
     filename: String,

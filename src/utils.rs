@@ -3,7 +3,7 @@ use super::*;
 lazy_static!{
     pub static ref SHOW_FOLDER: Mutex<String> = Mutex::new(String::from(""));
     pub static ref USERS_ATTEMPTS: Mutex<HashMap<String, (u32, Option<Instant>)>> = Mutex::new(HashMap::new());
-}
+} 
 
 pub fn decode_Windows_1255(bytes: &[u8]) -> String{
     // Try UTF-8 first
@@ -36,16 +36,15 @@ pub fn get_boundary(buffer: &Vec<u8>) -> Option<Vec<u8>> {
         };
     let boundary = &boundary_b[..boundary_right];
     let boundary = format!("--{}", String::from_utf8_lossy(&boundary[..])).into_bytes();
-    // println!("got the boundary as: {}", String::from_utf8_lossy(&buffer[..]));
     Some(boundary)
 }
 
 pub fn parse_file<'a>(
     stream: &mut TcpStream,
-    buffer: &'a [u8],
+    buffer: &'a mut Request,
     boundary: &[u8],
 ) -> Result<(&'a [u8], &'a str, String), &'static str> {
-    let content_boundary = match memmem::find_iter(buffer, &boundary)
+    let content_boundary = match memmem::find_iter(buffer.body.as_ref().unwrap(), &boundary)
         .map(|p| p as usize)
         .next()
     {
@@ -55,11 +54,11 @@ pub fn parse_file<'a>(
             return Err("fuck head, cant find the content");
         }
     };
-    let info = &buffer[content_boundary + boundary.len()..];
+    let info = &buffer.body.as_mut().unwrap()[content_boundary + boundary.len()..];
 
     //the content part
     let mut contents_find = memmem::find_iter(info, b"\r\n\r\n").map(|p| p as usize);
-    if let Some(_) = memmem::find(buffer, b"name=\"folder\"").map(|p| p as usize) {
+    if let Some(_) = memmem::find(&buffer.header[..], b"name=\"folder\"").map(|p| p as usize) {
         let _ = contents_find.next();
     }
     let contents_find = match contents_find.next() {
@@ -73,12 +72,10 @@ pub fn parse_file<'a>(
     let info = &info[..contents_find];
 
     // content-type part
-    let mut content_type = memmem::find_iter(buffer, b"Content-Type:").map(|p| p as usize);
+    let mut content_type = memmem::find_iter(&buffer.header[..], b"Content-Type:").map(|p| p as usize);
     let _ = content_type.next();
 
-    // println!("buffer = {}", String::from_utf8_lossy(&buffer[..]));
-
-    if let Some(_) = memmem::find(buffer, b"name=\"folder\"").map(|p| p as usize) {
+    if let Some(_) = memmem::find(&buffer.header[..], b"name=\"folder\"").map(|p| p as usize) {
         let content_type = match content_type.next(){
             Some(x) => x,
             None => {
@@ -87,7 +84,7 @@ pub fn parse_file<'a>(
                 return Ok((&[], "", Default::default()));
             }
         };
-        let content_type = &buffer[content_type + "Content-Type:\"".len()..];
+        let content_type = &buffer.header[content_type + "Content-Type:\"".len()..];
 
         // println!("content-type is equal to IDFKK ={}\n\n\n\n", String::from_utf8_lossy(&content_type[..]));
 
@@ -163,7 +160,7 @@ pub fn parse_file<'a>(
             return Ok((&[], "", Default::default()));
         }
     };
-    let content_type = &buffer[content_type + "Content-Type:\"".len()..];
+    let content_type = &buffer.header[content_type + "Content-Type:\"".len()..];
 
     // println!("content-type is equal to ={}", String::from_utf8_lossy(&content_type[..]));
 

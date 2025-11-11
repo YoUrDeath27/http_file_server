@@ -1,17 +1,17 @@
 use super::*; 
 
-pub fn web_send_image(mut stream:TcpStream, buffer: Vec<u8>){
+pub fn web_send_image(mut stream:TcpStream, buffer: Request){
 
-    let file = match memmem::find(&buffer[..], b" HTTP/1.1").map(|p| p as usize){
+    let file = match memmem::find(&buffer.header[..], b" HTTP/1.1").map(|p| p as usize){
         Some(x) => x,
         None => {
             println!("Probably the request got corrupted");
             send_error_response(&mut stream, 400, "The request got corrupted");
             return;
         }
-    };
+    }; 
 
-    let start = match memmem::find(&buffer, b"uploads").map(|p| p as usize){
+    let start = match memmem::find(&buffer.header[..], b"uploads").map(|p| p as usize){
         Some(x) => x,
         None => {
             println!("Probably the request got corrupted bitch");
@@ -19,7 +19,7 @@ pub fn web_send_image(mut stream:TcpStream, buffer: Vec<u8>){
             return;
         }
     };
-    let name = String::from_utf8_lossy(&buffer[start..file]);
+    let name = String::from_utf8_lossy(&buffer.header[start..file]);
     let mut file = match fs::File::open(&*name){
         Ok(x) => x,
         Err(e) => {
@@ -31,7 +31,7 @@ pub fn web_send_image(mut stream:TcpStream, buffer: Vec<u8>){
 
     let mut data = String::from(name.clone());
     data.replace_range(.."uploads".len(), "data");
-    data.replace_range(data.len().., ".txt");
+    data.replace_range(data.len().., ".txt"); //add at the end .txt
 
     println!("image data: {}", data);
     let mut data = match fs::File::open(data) { //why errorr??????????????????????//
