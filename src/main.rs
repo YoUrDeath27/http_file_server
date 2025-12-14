@@ -1,17 +1,17 @@
-use delete::{delete_file, delete_folder};
 use htmlescape::decode_html;
 use memchr::memmem;
-use percent_encoding::{percent_decode_str, percent_encode, utf8_percent_encode, AsciiSet, CONTROLS};
+use percent_encoding::percent_decode_str;
 use std::{
     fs,
-    io::Error,
     sync::Mutex,
     path::{Path, PathBuf},
-    io::{prelude::*, Read, Write},
+    io::{Read, Write, Error},
     net::{TcpListener, TcpStream},
-    time::{Instant, Duration},
+    time::{Instant, Duration},  //time
     collections::HashMap,
 };
+
+use chrono::prelude::*;
 
 use lazy_static::lazy_static;
 use zip::write::SimpleFileOptions;
@@ -20,34 +20,62 @@ use walkdir::WalkDir;
 use encoding::all::WINDOWS_1252;
 use encoding::{DecoderTrap, Encoding};
 
+use uuid::{Uuid};
+
 mod auth;
 mod file_operations;
 mod utils;
 mod pages;
 mod preview;
+mod security;
 
 use auth::*;
 use file_operations::*;
 use utils::*;
 use pages::*;
 use preview::*;
+use security::*;
 
-use std::any::type_name;
+// use std::any::type_name;
+
+
     // use std::thread;
     // use std::time::Duration;
     // use std::path::Path;
-
-
 /*
     ----------------------------------------------------------------------------------------------------------------------------------------------------------------
+    - NEXT STEPS TO IMPLEMENT (aka where you left off)
 
-    CHANGE FROM BUFER TO THE REQUEST struct SO THAT WE DONT ENTER WEIRD ERRORS WHEN UPLOADING TEXT AND PDF AND STUFF LIKE THAT
+    so security.rs nici nu mai tre sa zic ce trebuie sa ii faci, poate implement si cv de genu 
+        check_Auth, sau diverse
+
+    si log everything in the file, that can be logged ofc
+    so i can better see the workflow ig? but then there wil be a problem if i get 2 requests at the same time and both for different things but they get processed at the same time
+
+    -make in web so that they get sorted based on filename in data nu cel salvat ca sa arate bine (cred ca s-ar incadra in utils sa fac functia si in web doar sa trimit lista)
     
+    good luck
+
     ----------------------------------------------------------------------------------------------------------------------------------------------------------------  
+*/
+
+/*
+*****************************************************************************************************
+    MENTIONS
+    -cand log da fail creeaza un alt log (good idea?)
+
+
+*****************************************************************************************************
 */
 
 fn main() {
     let mut port = String::new();
+
+    // let datetime: DateTime<Local> = Local::now();
+    // println!("time: {}", datetime);
+    
+    // sort_name();
+    insert_sort();
 
     println!("Choose on which ip the server to listen to \n(e.g. 127.0.0.1:7878)");
     println!("ps: press enter to go with the default");
@@ -84,10 +112,55 @@ fn main() {
         Err(e) => println!("Failed to create the data directory\n{}", e) ,
     };
 
+    match log(&*String::from("Started the file server, ready to get requests"), 0){
+        Ok(x) => x,
+        Err(e) => {
+            println!("error logging: {}", e);
+        } 
+    }
+    
+    /*
+    match log(&*String::from("THis is a warning log"), 1){
+        Ok(x) => x,
+        Err(e) => {
+            println!("error logging: {}", e);
+            return;  
+        } 
+    }
+    match log(&*String::from("This is a server side error"), 2){
+        Ok(x) => x,
+        Err(e) => {
+            println!("error logging: {}", e);
+            return;  
+        } 
+    }
+    match log(&*String::from("THis is a client side error"), 3){
+        Ok(x) => x,
+        Err(e) => {
+            println!("error logging: {}", e);
+            return;  
+        } 
+    }
+    match log(&*String::from("This is a fatal error"), 4){
+        Ok(x) => x,
+        Err(e) => {
+            println!("error logging: {}", e);
+            return;  
+        } 
+    } */
+
+    /*
+    time: "21:58:01 UTC"
+    whatever: File { handle: 0x140, path: "\\\\?\\C:\\$Recycle.Bin\\S-1-5-21-820130014-3556285722-1672997054-1001\\$RG5XGF3.txt" }
+    not supposed to be like this
+     */
+   
     for stream in listener.incoming() {
         match stream {
-            Ok(stream) => handle_connection(stream),
-            Err(e) => println!("Failed to connect")
+            Ok(stream) => {
+                handle_connection(stream);
+            },
+            Err(e) => println!("Failed to connect {}", e  )
         }
     }
 }
@@ -97,7 +170,7 @@ pub struct Request<'a>{
     body: Option<Vec<u8>>
 }
 
-struct response {
+struct Response { // i should implement this later
     code: String,
     web_response: String 
 }
@@ -140,29 +213,27 @@ fn handle_connection(mut stream: TcpStream) {
         let is_get = memmem::find(&request.header, b"GET").is_some();
         let is_post = memmem::find(&request.header, b"POST").is_some();
 
-        let Content_count = match memmem::find(&received_data[..], b"Content-Length:").map(|p| p as usize) {
+        let content_count = match memmem::find(&received_data[..], b"Content-Length:").map(|p| p as usize) {
             Some(x) => x,
             None => 0,
         };
 
-        let rn = memmem::find(&received_data[Content_count + "Content-Length: ".len()..], b"\r\n").map(|p| p as usize).unwrap();
-        let Cc =&received_data[Content_count + "Content-Length: ".len()..] ;
-        let content_count: usize =  match std::str::from_utf8(&Cc[..rn])
+        let rn = memmem::find(&received_data[content_count + "Content-Length: ".len()..], b"\r\n").map(|p| p as usize).unwrap();
+        let cc =&received_data[content_count + "Content-Length: ".len()..] ;
+        let content_count: usize =  match std::str::from_utf8(&cc[..rn])
                                                 .expect("Not a valid UTF-8")
                                                 .trim()
                                                 .parse() {
                                                     Ok(x) => x,
-                                                    Err(e) => { println!("There is no content here\n\n"); 0}
+                                                    Err(e) => { 
+                                                        println!("There is no content here {}\n\n", e); 
+                                                        0
+                                                    }
                                                 };
                                                 
 
 
         request.body.as_mut().unwrap().extend_from_slice(&received_data[end + "\r\n\r\n".len()..]);
-
-        // println!("head:{}\n\n", String::from_utf8_lossy(&request.header[..]));
-        // println!("body: {}\n\n", String::from_utf8_lossy(&request.body.as_ref().unwrap().clone()[..]));
-        // println!("length expected: {}", content_count);
-        // println!("length got: {}", request.body.as_ref().unwrap().len());
 
         let finished = if is_get {
             true
@@ -176,11 +247,31 @@ fn handle_connection(mut stream: TcpStream) {
         };
 
         if finished{ //
-        println!("header: {}\n\n\n", String::from_utf8_lossy(&request.header[..]));
+        // println!("header: {}\n\n\n", String::from_utf8_lossy(&request.header[..]));
         // println!("body: {}\n\n\n", String::from_utf8_lossy(&request.body.as_ref().unwrap().clone()[..]));
-        println!("Finished the request: {:?}", String::from_utf8_lossy(&received_data[..]));
+        // println!("Finished the request: {:?}", String::from_utf8_lossy(&received_data[..]));
 
-            if !memmem::find(&request.header, b"../").is_some(){
+
+            match log(&*String::from_utf8_lossy(&received_data[..]), 0){
+                Ok(x) => x,
+                Err(e) => {
+                    send_error_response(&mut stream, 400, &e);   
+                } 
+            }
+    
+           
+            match decode_and_check_path(request.clone()) {
+                Ok(x) => {
+                    println!("\n\n\n\ndecoded finding: {}", x);
+                    ()
+                },
+                Err(_) => {
+                    send_error_response(&mut stream, 404, "The user attempted to do a path traversal trick");
+                    return;
+                }
+            }
+            
+            if !memmem::find(&request.header, b"../").is_some(){ //first check for path traversal
                 if is_get && bytes_read < buffer.len() {
                     get_method(stream, request);
                 }
@@ -188,7 +279,13 @@ fn handle_connection(mut stream: TcpStream) {
                     post_method(stream, request);
                 }
             } else {
-                send_error_response(&mut stream, 400, "Did you actually thought you can do this?");
+                match log(&*String::from("The user tried to do some path traversal"), 3){
+                    Ok(x) => x,
+                    Err(e) => {
+                        println!("error logging: {}", e);
+                    } 
+                }
+                send_error_response(&mut stream, 400, "Did you actually thought you can do this? 1");
             }
             break;
         }
@@ -199,26 +296,62 @@ fn get_method(mut stream: TcpStream, request: Request) {
     // let buffer = &request.body.as_ref().unwrap()[..];
 
     let connected = if let Some(_) = memmem::find(&request.header[..], b"Cookie: Auth").map(|p| p as usize) {
+        match log(&*String::from("The user is authenticated"), 1){
+            Ok(x) => x,
+            Err(e) => {
+                println!("error logging: {}", e);
+            } 
+        };
         true
     }   else {
+        match log(&*String::from("The user is not authenticated"), 1){
+            Ok(x) => x,
+            Err(e) => {
+                println!("error logging: {}", e);
+            } 
+        };
         false
     };
 
-    println!("connected ={:?}", connected);
+    // println!("connected ={:?}", connected);
 
 
     if connected == false {
         let status_line =  "HTTP/1.1 200 OK\r\n";
         let response = format!("{}Content-Type: text/html; charset=UTF-8\r\n\r\n{}",status_line, login_signup());
 
-        stream.write(response.as_bytes());
-        stream.flush();
-    }else if request.header[..6] == *b"GET / " && connected == true{
+        if let Err(e) = stream.write_all(response.as_bytes()) {
+            eprintln!("Write error: {}", e);
+            match log(&format!("Write error: {}", e), 3){
+                Ok(x) => x,
+                Err(e) => {
+                    send_error_response(&mut stream, 400, &e);   
+                } 
+            }
+        }
+        if let Err(e) = stream.flush() {
+            eprintln!("Error flushing: {}", e);
+            match log(&format!("Error flushing: {}", e), 3){
+                Ok(x) => x,
+                Err(e) => {
+                    send_error_response(&mut stream, 400, &e);   
+                } 
+            }
+        }
+
+    } else if request.header[..6] == *b"GET / " && connected == true{
         let status_line = "HTTP/1.1 200 OK\r\n";
         {
             let mut folder = match SHOW_FOLDER.lock() {
                 Ok(f) => f,
                 Err(e) => {
+                    match log(&format!("There was an error opening the folder mutex {}", e), 3) {
+                        Ok(x) => x,
+                        Err(e) =>{
+                            send_error_response(&mut stream, 400, &format!("{}", e));
+                            return;
+                        }
+                    }
                     send_error_response(&mut stream, 400, "Failed to open the folder Variable so i cant see who is conected");
                     return;
                 },
@@ -234,10 +367,10 @@ fn get_method(mut stream: TcpStream, request: Request) {
             let user = &request.header[user + "Cookie: Auth=\"user-".len() ..end];
             *folder = String::from_utf8_lossy(&user[..]).to_string(); //wtffffffff
         }
-        println!("Done with the normal GET request my guy");
+        // println!("Done with the normal GET request my guy");
 
         let site = web(request);
-        if(!memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some()){
+        if !memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some() {
             send_error_response(&mut stream, 400, "There has been an error generating the webpage");
             return;
         }
@@ -246,24 +379,36 @@ fn get_method(mut stream: TcpStream, request: Request) {
         // println!("{}", response);
         if let Err(e) = stream.write_all(response.as_bytes()) {
             eprintln!("Write error: {}", e);
+            match log(&format!("Write error: {}", e), 3){
+                Ok(x) => x,
+                Err(e) => {
+                    send_error_response(&mut stream, 400, &e);   
+                } 
+            }
         }
         if let Err(e) = stream.flush() {
             eprintln!("Error flushing: {}", e);
+            match log(&format!("Error flushing: {}", e), 3){
+                Ok(x) => x,
+                Err(e) => {
+                    send_error_response(&mut stream, 400, &e);   
+                } 
+            }
         }
 
 
     } else if memmem::find(&request.header, b"/uploads/").is_some(){ //for previews
         //for images
         web_send_image(stream, request);
-    } else if request.header[..19] == *b"GET /open_folder../" { //for back traversal
-        // go back one folder (somehow) work on this shit
-        println!("We got this chat");
+    } else if request.header[..19] == *b"GET /open_folder../" { //for back traversal  
+        // println!("We got this chat");
         let status_line = "HTTP/1.1 200 OK\r\n";
 
         {
             let mut folder = match SHOW_FOLDER.lock() {
                 Ok(f) => f,
                 Err(e) => {
+                    println!("failed to open the folder variable {}", e);
                     send_error_response(&mut stream, 400, "Failed to open the folder Variable so i cant see who is conected");
                     return;
                 },
@@ -278,12 +423,12 @@ fn get_method(mut stream: TcpStream, request: Request) {
                 }
             };
 
-            println!("parent = {:?}", parent.display().to_string());
+            // println!("parent = {:?}", parent.display().to_string());
             *folder = parent.display().to_string();
         }
 
         let site = web(request);
-        if(!memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some()){
+        if !memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some() {
             send_error_response(&mut stream, 400, "There has been an error generating the webpage");
             return;
         }
@@ -293,10 +438,22 @@ fn get_method(mut stream: TcpStream, request: Request) {
         // println!("{}", response);
         if let Err(e) = stream.write_all(response.as_bytes()) {
             eprintln!("Write error: {}", e);
+            match log(&format!("Write error: {}", e), 3){
+                Ok(x) => x,
+                Err(e) => {
+                    send_error_response(&mut stream, 400, &e);   
+                } 
+            }
         }
         if let Err(e) = stream.flush() {
             eprintln!("Error flushing: {}", e);
-        } 
+            match log(&format!("Error flushing: {}", e), 3){
+                Ok(x) => x,
+                Err(e) => {
+                    send_error_response(&mut stream, 400, &e);   
+                } 
+            }
+        }
 
         
     } else if request.header[..17] == *b"GET /open_folder/"{
@@ -312,6 +469,7 @@ fn get_method(mut stream: TcpStream, request: Request) {
             let mut folder = match SHOW_FOLDER.lock() {
                 Ok(f) => f,
                 Err(e) => {
+                    println!("There was a problem opening the folder variable {}", e);
                     send_error_response(&mut stream, 400, "Failed to open the folder Variable so i cant see who is conected");
                     return;
                 },
@@ -323,13 +481,13 @@ fn get_method(mut stream: TcpStream, request: Request) {
                 *folder = inner.to_string();
             }
 
-            println!("folder that im supposed to show= {}", *folder);
+            // println!("folder that im supposed to show= {}", *folder);
         }
 
-        println!("Done with the GET request my guy");
+        // println!("Done with the GET request my guy");
     
         let site = web(request);
-        if(!memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some()){
+        if !memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some() {
             send_error_response(&mut stream, 400, "There has been an error generating the webpage");
             return;
         }
@@ -339,14 +497,26 @@ fn get_method(mut stream: TcpStream, request: Request) {
         // println!("{}", response);
         if let Err(e) = stream.write_all(response.as_bytes()) {
             eprintln!("Write error: {}", e);
+            match log(&format!("Write error: {}", e), 3){
+                Ok(x) => x,
+                Err(e) => {
+                    send_error_response(&mut stream, 400, &e);   
+                } 
+            }
         }
         if let Err(e) = stream.flush() {
             eprintln!("Error flushing: {}", e);
+            match log(&format!("Error flushing: {}", e), 3){
+                Ok(x) => x,
+                Err(e) => {
+                    send_error_response(&mut stream, 400, &e);   
+                } 
+            }
         }
     }   
 }
 
-fn post_method(mut stream: TcpStream, buffer: Request) {
+fn post_method(stream: TcpStream, buffer: Request) {
     if let Some(action) = memmem::find(&buffer.body.clone().unwrap()[..], b"action=").map(|p| p as usize) {
         post_action(stream, buffer, action);
     } else if let Some(_) = memmem::find(&buffer.body.clone().unwrap()[..], b"account=").map(|p| p as usize){
@@ -371,7 +541,7 @@ fn post_action(mut stream: TcpStream, buffer: Request, action: usize) {
         };
         let action = &data[..end1];
 
-        println!("\n0.5action: {:?}", String::from_utf8_lossy(&action[..]));
+        // println!("\n0.5action: {:?}", String::from_utf8_lossy(&action[..]));
 
         let f = match memmem::find(data, b"filename=")
             .map(|p| p as usize){
@@ -384,30 +554,56 @@ fn post_action(mut stream: TcpStream, buffer: Request, action: usize) {
             };
         let filename = &data[f + "filename=".len()..];
 
-        println!("\nfile: {:?}", String::from_utf8_lossy(&filename[..]));
+        // println!("\nfile: {:?}", String::from_utf8_lossy(&filename[..]));
 
         let filename = percent_decode_str(&*String::from_utf8_lossy(&filename[..]))
             .decode_utf8_lossy()
             .replace("+", " ");
 
-        println!("\n1action: {:?}", String::from_utf8_lossy(&action[..]));
-
-        println!("filename before renaming: {:?}", filename);
         if path_traversal_check(&filename) {
-            send_error_response(&mut stream, 400, "Did you actually thought you can do this?");
+
+            match log("The client tried to do a path traversal", 2){
+                Ok(x) => x,
+                Err(e) => {
+                    send_error_response(&mut stream, 400, &e);   
+                } 
+            }
+            send_error_response(&mut stream, 400, "Did you actually thought you can do this? 2");
             return;    
         }
 
         if action[..] == *b"DELETE" {
-            println!("Deleted something");
+            // println!("Deleted something");
+            match log("The user is deleting something", 0){
+                Ok(x) => x,
+                Err(e) => {
+                    send_error_response(&mut stream, 400, &e);   
+                } 
+            }
             delet(stream, filename, buffer);
-        } else if action[..] == *b"ADD_FOLDER" {
-            println!("Added a folder");
+        } else if action[..] == *b"ADD_FOLDER" {    
+            // println!("Added a folder");
+            match log("The user is making another folder", 0){
+                Ok(x) => x,
+                Err(e) => {
+                    send_error_response(&mut stream, 400, &e);   
+                } 
+            }
             add_folder(stream, buffer, filename);
         } else if action[..] == *b"DOWNLOAD" {
-            println!("Downloaded a file");
-            download(stream, filename, buffer);
+            // println!("Downloaded a file");
+            match log("The user is downloading a file stored on the server", 0){
+                Ok(x) => x,
+                Err(e) => {
+                    send_error_response(&mut stream, 400, &e);   
+                } 
+            }
+            download(stream, filename);
         } else if action[..] == *b"RENAME_FOLDER" {
+
+            //idk why this part is here but i'm gonna move it
+            //or maybe not
+            
             let end2 = match end.next(){
                 Some(x) => x,
                 None => {
@@ -422,37 +618,48 @@ fn post_action(mut stream: TcpStream, buffer: Request, action: usize) {
             .decode_utf8_lossy()
             .replace("+", " ");
 
-            println!("filename after renaming: {:?}", filename);
+            // println!("filename after renaming: {:?}", filename);
 
 
-            println!("Renaming a folder");
+            // println!("Renaming a folder");
             let new_filename =
                 percent_decode_str(&*String::from_utf8_lossy(&data[end2 + "&newFile=".len()..]))
                     .decode_utf8_lossy()
                     .replace("+", " ");
-            println!("new:{}", new_filename);
+            // println!("new:{}", new_filename);
 
             if path_traversal_check(&new_filename) {
-                send_error_response(&mut stream, 400, "Did you actually thought you can do this?");
+                send_error_response(&mut stream, 400, "Did you actually thought you can do this? 3");
                 return;    
             }
 
+            match log("The user is renaming a folder", 0){
+                Ok(x) => x,
+                Err(e) => {
+                    send_error_response(&mut stream, 400, &e);   
+                } 
+            }
             rename_folder(stream, buffer, filename, new_filename);
         } else if action[..] == *b"DOWNLOAD_FOLDER" {
-            println!("Downloading folder as ZIP");
+            // println!("Downloading folder as ZIP");
+            match log("The user is zip downloading a folder", 0){
+                Ok(x) => x,
+                Err(e) => {
+                    send_error_response(&mut stream, 400, &e);   
+                } 
+            }
             download_folder(stream, filename);
         } else {
+            match log("The user attempted to", 2){
+                Ok(x) => x,
+                Err(e) => {
+                    send_error_response(&mut stream, 400, &e);   
+                } 
+            }
             send_error_response(&mut stream, 404, "Action not found to perform");
         }
 
         // println!("did one of the requests");
     }
-
-fn path_traversal_check(path: &str) -> bool {
-    if path.contains("../") || path.contains("..\\") || path.contains(".."){
-        return true;
-    }
-    false
-}
 
 // 217193383

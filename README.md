@@ -11,12 +11,11 @@ it got quite a simple UI but it needs to be imporoved
 (idk what else to say)
 
 in the future im planning to implement:
-  - better security
-  - better terminal logging
+  - better security (still working on it)
   - input sanitization and validation (e.g. %20 -> " ")
 
-  - session management (so you can be connected on multiple devices)
   - file search and filtering
+  - session management (so you can be connected on multiple devices)
   - file sharing & public links (or links to directly download)
   - a database config so i dont have to use my current version of storing file data
   - better file metadata
@@ -24,5 +23,4 @@ in the future im planning to implement:
   - API endpoints (for android ig and other clients)
 
   - user roles and permisions
-  - maybe storage backend
-  - 
+  - maybe storage backend (so it does automatical backups on user files either from google photos or directly from phone)

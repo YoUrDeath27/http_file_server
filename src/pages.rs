@@ -5,6 +5,13 @@
                 Ok(x) => x,
                 Err(e) => {
                     println!("cant identify the user from the folder mutex\n{:?}", e);
+                    match log(&format!("Error identifying the user from Mutex : {}", e), 3){
+                        Ok(x) => x,
+                        Err(_e) => {
+                            // send_error_response(&mut stream, 400, &e);   
+                            return String::from("");
+                        } 
+                    }
                     // send_error_response(&mut stream, 500, "There is a problem that we dont know how u got here");
                     return String::from("");
                 }
@@ -19,37 +26,44 @@
                     .to_owned()
                 );
         let folder2 = folder.clone();
-        let folder3 = folder.clone();
 
-        let binding = decode_Windows_1255(&folder3.into_bytes()[..]);
-        let folder3 = percent_decode_str(
-            &*binding
-        ).decode_utf8_lossy().to_string().into_bytes();
-        let folder3 = decode_Windows_1255(&folder3[..]);
+        let binding = decode_windows_1255(&folder2.into_bytes()[..]);
+        let folder2 = percent_decode_str(&*binding).decode_utf8_lossy().to_string().into_bytes();
+        let folder2 = decode_windows_1255(&folder2[..]);
 
-        // println!("uploads/{}", 
-        //     folder3
-        // );
-
-        let data_entries = match fs::read_dir(format!("data/{}", folder3)){
+        let data_entries = match fs::read_dir(format!("data/{}", folder2)){
             Ok(x) => x,
             Err(e) => {
                 println!("Unnable to read the folder\n{}", e);
+                match log(&format!("Error reading the folder: {}", e), 3){
+                    Ok(x) => x,
+                    Err(_e) => {
+                        // send_error_response(&mut stream, 400, &e);   
+                        return String::from("");
+                    } 
+                }
                 // send_error_response(&mut stream, 404, "Unnable to locate your folder with files, try logging in again");
                 return String::from("");
             }
         };
 
-        let entries = match fs::read_dir(format!("uploads/{}", folder3)){
+        let entries = match fs::read_dir(format!("uploads/{}", folder2)){
             Ok(x) => x,
             Err(e) => {
                 println!("Unnable to read the folder\n{}", e);
+                match log(&format!("Error reading the uploads folder: {}", e), 3){
+                    Ok(x) => x,
+                    Err(_e) => {
+                        // send_error_response(&mut stream, 400, &e);   
+                        return String::from("");
+                    } 
+                }
                 // send_error_response(&mut stream, 404, "Unnable to locate your folder with files, try logging in again");
                 return String::from("");
             }
         };
 
-        println!("folder checking: {}", folder);
+        // println!("folder checking: {}", folder);
         
         let mut file_names = Vec::new();
 
@@ -60,6 +74,13 @@
                 Ok(x) => x,
                 Err(e) => {
                     println!("No users uploads found\n{:?}", e);
+                    match log(&format!("Error with getting the file's entryes: {}", e), 1){
+                        Ok(x) => x,
+                        Err(_e) => {
+                            // send_error_response(&mut stream, 400, &e);   
+                            return String::from("");
+                        } 
+                    }
                     // send_error_response(&mut stream, 404, "There is a problem accessing your uploads, try again later");
                     return String::from("");
                 }
@@ -68,13 +89,17 @@
             let file_name = match entry.file_name().into_string(){
                 Ok(x) => x,
                 Err(e) => {
-                    println!("The user's username is unnable to be converted to string\n{:?}", e);
-                    // send_error_response(&mut stream, 404, "The user contains illegitimate characters");
+                    println!("The user's filename is unnable to be converted to string\n{:?}", e);
+                    match log(&format!("Error converting the filename in a UTF-8 format: {:?}", e), 1){
+                        Ok(x) => x,
+                        Err(_e) => {
+                            // send_error_response(&mut stream, 400, &e);  
+                            return String::from("");
+                        } 
+                    }
                     return String::from("");
                 }
             };
-            println!("entry in bytes= {:?}", &file_name.clone().into_bytes()[..]);
-            println!("entry in string: {}", String::from_utf8_lossy(&file_name.clone().into_bytes()[..]));
             file_names.push(file_name);
         }
 
@@ -86,6 +111,13 @@
                 Ok(x) => x,
                 Err(e) => {
                     println!("No users uploads found\n{:?}", e);
+                    match log(&format!("Error in finding uploaded files: {}", e), 1){
+                        Ok(x) => x,
+                        Err(_e) => {
+                            // send_error_response(&mut stream, 400, &e);   
+                            return String::from("");
+                        } 
+                    }
                     // send_error_response(&mut stream, 404, "There is a problem accessing your uploads, try again later");
                     return String::from("");
                 }
@@ -96,6 +128,14 @@
                 Ok(x) => x,
                 Err(e) => {
                     println!("The user's username is unnable to be converted to string\n{:?}", e);
+                    match log(&format!("Error converting the filename in a UTF-8 format: {:?}", e), 1){
+                        Ok(x) => x,
+                        Err(_e) => {
+                            // send_error_response(&mut stream, 400, &e);   
+                            return String::from("");
+
+                        } 
+                    }
                     // send_error_response(&mut stream, 404, "The user contains illegitimate characters");
                     return String::from("");
                 }
@@ -186,23 +226,30 @@
         
         if let Some(user) =  memmem::find(&buffer.header[..], b"Cookie: Auth=\"user-").map(|p| p as usize) {
             
-            let folder = &*folder.as_bytes();
+            let user_folder = &*folder.as_bytes();
             let user = &buffer.header[user + "Cookie: Auth=\"user-".len() ..];
             let end = match memmem::find(user, b"-token").map(|p| p as usize){
                 Some(x) => x,
                 None => {
                     println!("Unnable to find the end of Auth token");
+                    match log("Error finding the user's Auth token", 2){
+                        Ok(x) => x,
+                        Err(_e) => {
+                            // send_error_response(&mut stream, 400, &e); 
+                            return String::from("");  
+                        } 
+                    }
                     // send_error_response(&mut stream, 404, "We were unnable to locate your auth key<br> u tampered with it right?");
                     return String::from("");
                 }
             };
             let user = &user[..end];
 
-            let folder_b = &folder[user.len()..];
-            let folder = String::from_utf8_lossy(&folder_b[..]);
-            println!("folder that im currently in= {}", folder);
+            let folder_b = &user_folder[user.len()..];
+            let user_folder = String::from_utf8_lossy(&folder_b[..]);
+            // println!("folder that im currently in= {}", user_folder);
 
-            if &folder != ""  {         //911 joke incoming //it was on line 911 at the time of writing that comment
+            if &user_folder != ""  {         //911 joke incoming //it was on line 911 at the time of writing that comment
                 let breadcrumb = memmem::rfind(&folder_b[..], b"/").map(|p| p as usize).unwrap();
                 let parent_folder = &folder_b[..breadcrumb];
                 html.push_str(&*format!(
@@ -226,20 +273,17 @@
                     ));
                 }
             }
-        } //else make the user log in
+        } 
         
-
         html.push_str("
             <h2> Saved Files:</h2>
             <ul>
         ");
 
+        let file_folder = &folder;
         for i in 0..file_names.len() {
-
-            println!("file idfk: {}", files[i].display());
-            println!("file_names length: {}", file_names.len());
-
             if !files[i].is_file() {
+            
                 html.push_str(&*format!(
                     "<li>
                         <h3>
@@ -281,8 +325,60 @@
                     file_names[i]
                 ));
             } else {
-                println!("file: {:?}", file_names[i]);
-                println!("filejs: {}", files[i].display());
+                // println!("file: {:?}", file_names[i]);
+                // println!("filejs: {}", files[i].display());
+
+                println!("folders: {}", folder);
+
+                let mut file_data = match fs::File::open(format!("data/{}/{}.txt",file_folder, file_names[i])){
+                    Ok(x) => x,
+                    Err(e) => {
+                        println!("The user's uploads folder cannot be read\n{}\n{}", e, file_names[i]);
+                        match log(&format!("Error reading from the upload's folder: {}", e), 3){
+                            Ok(x) => x,
+                            Err(_e) => {
+                                // send_error_response(&mut stream, 400, &e);   
+                                return String::from("");
+                            } 
+                        }
+                        // send_error_response(&mut stream, 404, "We are unnable to locate your file, please try again later");
+                        return String::from("");
+                    }
+                };
+                let mut read = Vec::new();
+                match file_data.read_to_end(&mut read) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        println!("There was an error reading the file data\n{}\n{}", e, file_names[i]);
+                        match log(&format!("Error reading from the data's folder: {}", e), 3){
+                            Ok(x) => x,
+                            Err(_e) => {
+                                // send_error_response(&mut stream, 400, &e);   
+                                return String::from("");
+                            } 
+                        }
+                        // send_error_response(&mut stream, 400, "THere was an error getting the file's data, please come back later");
+                        return String::from("");
+                    }
+                };
+
+                let file_disk_name = match memmem::find(&read[..], b"file_name:\"").map(|p| p as usize){
+                    Some(x) => x,
+                    None => {
+                        println!("The file data got corrupted {}", file_names[i]);
+                        match log("Error reading the original filename's name", 3){
+                            Ok(x) => x,
+                            Err(_e) => {
+                                // send_error_response(&mut stream, 400, &e);   
+                                return String::from("");
+                            } 
+                        }
+                        // send_error_response(&mut stream, 400, "The file data got corrupted, please try reuploading it");
+                        return String::from("");
+                    }
+                };
+                let file_disk_name = &read[file_disk_name + "file_name:\"".len() .. read.len() - 1];
+                let name = String::from_utf8_lossy(&file_disk_name[..]);
 
                 html.push_str(&*format!(
                     "<li> 
@@ -307,7 +403,7 @@
                                 </form>
                             </div>
                         ",
-                    file_names[i], 
+                    name, 
                     i, 
                     file_names[i], 
                     file_names[i]
@@ -316,23 +412,56 @@
                     Ok(x) => x,
                     Err(e) => {
                         println!("The user's uploads folder cannot be read\n{:?}", e);
+                        match log(&format!("Error reading the uploads folder: {}", e), 3){
+                            Ok(x) => x,
+                            Err(_e) => {
+                                // send_error_response(&mut stream, 400, &e);   
+                                return String::from("");
+                            } 
+                        }
                         return String::from("");
                     }
                 };
 
                 let mut content_type = String::new();
-                content_type_file.read_to_string(&mut content_type);
-                let c_type = String::from_utf8_lossy(&content_type.as_bytes()["Content-Type:".len()..]);
+                match content_type_file.read_to_string(&mut content_type){
+                    Ok(x) => x, 
+                    Err(e) => {
+                        match log(&format!("{}", e), 3){
+                            Ok(x) => x,
+                            Err(e) => {
+                                println!("{}", e);
+                                return String::from("");
+                            }
+                        }
+                        return String::from("");
+                    }
+                };
+                let end = match memmem::find(&content_type.as_bytes()[..], b";").map(|p| p as usize) {
+                    Some(x) => x,
+                    None => {
+                        println!("SIgma sigma on the wall, why did u mess with the files again?");
+                        match log("There is problem reading the content type", 3){
+                            Ok(x) => x,
+                            Err(_e) => {
+                                // send_error_response(&mut stream, 400, &e);  
+                                return String::from("");
+                            } 
+                        }
+                        return String::from("");
+                    }
+                };
+                let c_type = String::from_utf8_lossy(&content_type.as_bytes()["Content-Type:".len()..end]);
                 println!("FIle data type is: {}", c_type);
 
-                if Image_Types.contains(&&*c_type) {
+                if IMAGE_TYPES.contains(&&*c_type) {
                     html.push_str(&format!("
                         <img src={} alt =\"IDFK\" style=\"max-width: 300px; \" >",
                         files[i].display()
                     ));
-                    println!("image showing");
+                    // println!("image showing");
                 } //then check for videos, text and all the other
-                else if Video_Types.contains(&&*c_type) { //why tf is this not working?
+                else if VIDEO_TYPES.contains(&&*c_type) { //why tf is this not working?
                     html.push_str(&format!("
                         <video width=\"300\" height =\"240\" controls>
                             <source src=\"{}\" type=\"{}\">
@@ -341,7 +470,7 @@
                     ",  files[i].display(),
                         c_type
                     ));
-                    println!("Video showing");
+                    // println!("Video showing");
                 }
                 html.push_str("</div>
                                 </li>\n
@@ -399,8 +528,27 @@
 
         let response = format!("{}\r\n\r\n{}", status_line, error_web(message));
         // println!("reponse =\n{}", response);
-        let _ = stream.write_all(response.as_bytes());
-        let _ = stream.flush();
+        
+        if let Err(e) = stream.write_all(response.as_bytes()) {
+            eprintln!("Write error: {}", e);
+            match log(&format!("Write error: {}", e), 3){
+                Ok(x) => x,
+                Err(e) => {
+                    // send_error_response(&mut stream, 400, &e);  
+                    println!("YOu are literally cooked {}", e); 
+                } 
+            }
+        }
+        if let Err(e) = stream.flush() {
+            eprintln!("Error flushing: {}", e);
+            match log(&format!("Error flushing: {}", e), 3){
+                Ok(x) => x,
+                Err(e) => {
+                    // send_error_response(&mut stream, 400, &e);   
+                    println!("YOu are literally cooked {:?}", e); 
+                } 
+            }
+        }
     }
 
     pub fn error_web(message: &str) -> String {
@@ -462,7 +610,6 @@
 
     pub fn password(name: String, extra_info: Option<&str>) -> String { 
         
-        println!("WHY TF THE NAME IS: {}", name);
         let mut html = String::from(format!("
             <!DOCTYPE html>
             <html>

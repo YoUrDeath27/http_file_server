@@ -17,3 +17,11 @@ encoding = "0.2"
 bcrypt = "0.17"
 serde = "1.0.228"
 
+chrono = "0.4.42"
+
+[dependencies.uuid]
+version = "1.18.1"
+# Lets you generate random UUIDs
+features = [
+    "v4",
+]
