@@ -11,6 +11,7 @@ it got quite a simple UI but it needs to be imporoved
 (idk what else to say)
 
 in the future im planning to implement:
+  - figure out what past me did 
   - better security (still working on it)
   - input sanitization and validation (e.g. %20 -> " ")
 

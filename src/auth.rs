@@ -425,7 +425,7 @@ fn failed_attempt(status_line: &str, user: &str, time: f32) -> String{
 
 fn incorrect_pass(stream: &mut TcpStream, username: &str) {
     let status_line =  "HTTP/1.1 200 OK\r\n";
-    let mut response = format!("{}Content-Type: text/html; charset=UTF-8\r\n\r\n{}",status_line, password(username.to_string(), Some("try to remember the password u used when creating this account you fucking bitch")));
+    let mut response = format!("{}Content-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, password(username.to_string(), Some("try to remember the password u used when creating this account you fucking bitch")));
     //store here the user and amount of failed attempts
 
     let mut attempts;

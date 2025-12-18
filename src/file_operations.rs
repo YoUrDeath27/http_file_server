@@ -12,6 +12,7 @@ pub fn upload_file(mut stream: TcpStream, buffer: Request) {
 
     // println!("boundary={}", String::from_utf8_lossy(&boundary[..]));
 
+
     let mut buffer1 = buffer.clone();
     let (content, content_type, filename) = match parse_file(&mut stream, &mut buffer1, &boundary) {
         Ok(data) => data,
@@ -1028,6 +1029,7 @@ fn add_file(
         let extension = &filename.as_bytes()[extension..];
         disk_filename.push_str(&String::from_utf8(extension.to_vec()).unwrap());
     }
+
     {
         let folder = match SHOW_FOLDER.lock(){
             Ok(x) => x,
@@ -1079,8 +1081,24 @@ fn add_file(
                 disk_filename);
             // println!("filename_data = {}", filename_data);
             // println!("filename_data = {}", filename_data);
+
+            let date = match get_date() {
+                Ok(x) => x,
+                Err(e) => {
+                    println!("Error getting the date: {}", e);
+                    panic!("YOu are fucked because chronos doesnt work (date)");
+                }   
+            };
+
+            let time = match get_time() {
+                Ok(x) => x,
+                Err(e) => {
+                    println!("Error getting the date: {}", e);
+                    panic!("YOu are fucked because chronos doesnt work (time)");
+                }   
+            };
             let mut file2 = fs::File::create(&filename_data).unwrap();
-            match file2.write_all(&format!("Content-Type:{};\r\nfile_name:\"{}\"", content_type, user_filename).into_bytes()[..]) {
+            match file2.write_all(&format!("Content-Type:{};\r\nfile_name:\"{}\";\r\ndate:\"{}\";\r\ntime:\"{}\";", content_type, user_filename, date, time).into_bytes()[..]) {
                 Ok(x) => x,
                 Err(e) => {
                     match log(&format!("{}", e), 3){

@@ -536,7 +536,7 @@ pub fn parse_file<'a>(
 
 
 //sorting functions
-pub fn sort_name() -> Result<Vec<String>, String> {
+pub fn bubble_sort() -> Result<Vec<String>, String> {
 
     let user = match SHOW_FOLDER.lock(){
         Ok(x) => x.clone(),
@@ -673,95 +673,406 @@ pub fn sort_name() -> Result<Vec<String>, String> {
     Ok(Vec::new())
 }
 
+#[derive(Clone, Debug)]
+pub struct FileNames{
+    pub diskname: PathBuf, //path for detecting if it's a file or folder
+    pub realname: String,   //name used for sorting
+    pub date: String,
+    pub time: String,
 
-pub fn insert_sort() -> Result<Vec<String>, String> {
+    //more to come like date time, file type sort and size
+}
 
-    let mut sorting = vec![ String::from("nasfasfd"), String::from("maf"), String::from("basfafa"), String::from("vakkmf")
-                            // , String::from("clfma"), String::from("x]ak"), String::from("zojw"), 
-                            // String::from("ykanf"), String::from("tklfn"), String::from("rklan"), String::from("eaklmf"), 
-                            // String::from("wljkafn"), String::from("qjdaklf"), String::from("lpamv"), String::from("kafjasn"), 
-                            // String::from("japfns"), String::from("hpansk"), String::from("ganc"), String::from("faspcn"), 
-                            // String::from("dkaas"), String::from("sjnas"), String::from("pasfjnl"), String::from("opojfen"), 
-                            // String::from("imvank"), String::from("ulknadl"), String::from("yknlav"), String::from("tlkdmav"), 
-                            // String::from("rlnd"), String::from("elkndm"), String::from("wijlkdm"), String::from("qdjaikfl")
-                    ];
+impl FileNames {
+    pub fn new() -> FileNames {
+        FileNames{
+            diskname: PathBuf::new(),
+            realname: String::from(""),
+            date: String::from(""),
+            time: String::from(""),
 
-    let mut sorted: Vec<String> = Vec::new();
-    println!("len: {:?}", sorted.len());
+        }
+    }  
+}
+
+pub fn alfabetical_order(user: String) -> Result<Vec<FileNames>, String> { //first insert sorting algorigthm, how did i do teacher?
+
+    let data = match fs::read_dir(format!("data/{}", user)){
+        Ok(x) => x,
+        Err(e) => {
+            println!("Unnable to read the folder\n{}", e);
+            match log(&format!("Error reading the data folder: {}", e), 3){
+                Ok(x) => x,
+                Err(_e) => {
+                    return Err(String::from("Error reading logging"));
+                } 
+            }
+            return Err(String::from("Error reading the data folder"));
+        }
+    };
+
+    let mut data_file_names = Vec::new();
+    let mut data_files = Vec::new();
+
+    let mut folders = Vec::new();
+    let mut names = Vec::new();
+
+    for entry in data {
+        let entry = match entry{
+            Ok(x) => x,
+            Err(e) => {
+                println!("No users uploads found\n{:?}", e);
+                match log(&format!("Error in finding uploaded files: {}", e), 1){
+                    Ok(x) => x,
+                    Err(_e) => {
+                        // send_error_response(&mut stream, 400, &e);   
+                        return Err(String::from(""));
+                    } 
+                }
+                return Err(String::from(""));
+            }
+        };
+
+        data_files.push(entry.path());
+        let file_name = match entry.file_name().into_string(){
+            Ok(x) => x,
+            Err(e) => {
+                println!("The user's username is unnable to be converted to string\n{:?}", e);
+                match log(&format!("Error converting the filename in a UTF-8 format: {:?}", e), 1){
+                    Ok(x) => x,
+                    Err(_e) => {
+                        // send_error_response(&mut stream, 400, &e);   
+                        return Err(String::from(""));
+                    } 
+                }
+                return Err(String::from(""));
+            }
+        };
+
+        data_file_names.push(file_name.clone());
+
+        println!("name: {:?}", file_name);
+
+        //if able to open file then search to get the file name
+
+        let data = match fs::read(format!("data/{}/{}", user, file_name)){
+            Ok(x) => x,
+            Err(e) => {
+                println!("The user's data file cannot be read\n{:?}", e);
+                match log(&format!("The user's data file cannot be read\n{:?}", e), 3){
+                    Ok(x) => x,
+                    Err(_e) => {
+                        // send_error_response(&mut stream, 400, &e);   
+                        return Err(String::from("Error logging"));
+                    } 
+                }
+                // return Err(String::from("Error reading the data file"));
+
+                let path = PathBuf::from(format!("data/{}/{}", user, file_name));
+                
+                folders.push(FileNames{
+                    diskname: path,
+                    realname: file_name,
+                    date: String::from(""),
+                    time: String::from("")
+                });
+
+
+                continue;
+                // vec![0u8; 0]
+            }
+        };
+
+        let (name, date, time) = match get_data_info(data){
+            Ok(x) => x,
+            Err(e) => {
+                println!("{:?}", e);
+                match log(&format!("{:?}", e), 1){
+                    Ok(x) => x,
+                    Err(_e) => {
+                        // send_error_response(&mut stream, 400, &e);   
+                        return Err(String::from(""));
+                    } 
+                }
+                return Err(String::from(""));
+            }
+        };
+
+
+        names.push(FileNames{
+            diskname: entry.path(),
+            realname: name.to_string(),
+            date: date.to_string(),
+            time: time.to_string(),
+        })
+        // let data = fs::File::open(format!("{}", file_name));
+
+    }
+
+    let sorted_folders = sort_fn(folders.clone());
+    println!("empty\n\n\n\n");
+    let sorted_files = sort_fn(names.clone());
+    
+    println!("\nfolders: {:?}", sorted_folders);
+    println!("\nsorted: {:?}", sorted_files); //could do better???
+    // println!("len sorted: {}", sorted.len());
+    // println!("len unsorted: {}", sorting.len());
+
+
+    println!("\n\ndata entryes names {:?}", data_file_names);
+    println!("names: {:?}", names);
+
+    let mut sorted = Vec::new();
+    
+    for i in sorted_folders{
+        sorted.push(i);
+    } 
+    for i in sorted_files{
+        sorted.push(i);
+    }
+
+    println!("\n\nsorted: {:?}", sorted); //could do better???
+
+    Ok(sorted)
+        
+}
+
+pub fn upload_order(user: String) -> Result<Vec<FileNames>, String> { //first insert sorting algorigthm, how did i do teacher?
+
+    let data = match fs::read_dir(format!("data/{}", user)){
+        Ok(x) => x,
+        Err(e) => {
+            println!("Unnable to read the folder\n{}", e);
+            match log(&format!("Error reading the data folder: {}", e), 3){
+                Ok(x) => x,
+                Err(_e) => {
+                    return Err(String::from("Error reading logging"));
+                } 
+            }
+            return Err(String::from("Error reading the data folder"));
+        }
+    };
+
+    
+    let mut data_file_names = Vec::new();
+    let mut data_files = Vec::new();
+
+    let mut folders = Vec::new();
+    let mut names = Vec::new();
+
+    for entry in data {
+        let entry = match entry{
+            Ok(x) => x,
+            Err(e) => {
+                println!("No users uploads found\n{:?}", e);
+                match log(&format!("Error in finding uploaded files: {}", e), 1){
+                    Ok(x) => x,
+                    Err(_e) => {
+                        // send_error_response(&mut stream, 400, &e);   
+                        return Err(String::from(""));
+                    } 
+                }
+                return Err(String::from(""));
+            }
+        };
+
+        data_files.push(entry.path());
+        let file_name = match entry.file_name().into_string(){
+            Ok(x) => x,
+            Err(e) => {
+                println!("The user's username is unnable to be converted to string\n{:?}", e);
+                match log(&format!("Error converting the filename in a UTF-8 format: {:?}", e), 1){
+                    Ok(x) => x,
+                    Err(_e) => {
+                        // send_error_response(&mut stream, 400, &e);   
+                        return Err(String::from(""));
+                    } 
+                }
+                return Err(String::from(""));
+            }
+        };
+
+        data_file_names.push(file_name.clone());
+
+        println!("name: {:?}", file_name);
+
+        //if able to open file then search to get the file name
+
+        let data = match fs::read(format!("data/{}/{}", user, file_name)){
+            Ok(x) => x,
+            Err(e) => {
+                println!("The user's data file cannot be read\n{:?}", e);
+                match log(&format!("The user's data file cannot be read\n{:?}", e), 3){
+                    Ok(x) => x,
+                    Err(_e) => {
+                        // send_error_response(&mut stream, 400, &e);   
+                        return Err(String::from("Error logging"));
+                    } 
+                }
+                // return Err(String::from("Error reading the data file"));
+
+                let path = PathBuf::from(format!("data/{}/{}", user, file_name));
+                
+                folders.push(FileNames{
+                    diskname: path,
+                    realname: file_name,
+                    date: String::from(""),
+                    time: String::from(""),
+                });
+
+
+                continue;
+                // vec![0u8; 0]
+            }
+        };
+
+
+        let (name, date, time) = match get_data_info(data){
+            Ok(x) => x,
+            Err(e) => {
+                println!("{:?}", e);
+                match log(&format!("{:?}", e), 1){
+                    Ok(x) => x,
+                    Err(_e) => {
+                        // send_error_response(&mut stream, 400, &e);   
+                        return Err(String::from(""));
+                    } 
+                }
+                return Err(String::from(""));
+            }
+        };
+
+
+        names.push(FileNames{
+            diskname: entry.path(),
+            realname: name.to_string(),
+            date: date.to_string(),
+            time: time.to_string()
+        })
+        // let data = fs::File::open(format!("{}", file_name));
+
+    }
+
+    let sorted_folders = sort_fn(folders.clone());
+    println!("empty\n\n\n\n");
+    let sorted_files = sort_fn_date(names.clone());
+
+    println!("\n\ndata entryes names {:?}", data_file_names);
+    println!("names: {:?}", names);
+
+//     data entryes names ["1cbe97fc-74fb-4cb2-987b-e018f636be41.png.txt", "77e05d75-cbd0-4787-8a6a-abecb3fbca12.png.txt", "a", "e559d9bf-6522-47b1-a6c0-f7bdbb3121e5.png.txt", "l", "sigma", "t"] 
+// names: [FileNames { diskname: "data/augu\\1cbe97fc-74fb-4cb2-987b-e018f636be41.png.txt", realname: "erm.png", date: "2025-12-17", time: "10:55:32" }, FileNames { diskname: "data/augu\\77e05d75-cbd0-4787-8a6a-abecb3fbca12.png.txt", realname: "Dexter_morgan.png", date: "2025-12-17", time: "10:54:59" }, FileNames { diskname: "data/augu\\e559d9bf-6522-47b1-a6c0-f7bdbb3121e5.png.txt", realname: "Dexter_morgan_2.png", date: "2025-12-17", time: "10:55:58" }]
+
+
+/*  sorted upload time: [
+        FileNames { diskname: "data/augu/a", realname: "a", date: "", time: "" }, 
+        FileNames { diskname: "data/augu/l", realname: "l", date: "", time: "" }, 
+        FileNames { diskname: "data/augu/sigma", realname: "sigma", date: "", time: "" }, 
+        FileNames { diskname: "data/augu/t", realname: "t", date: "", time: "" }, 
+        FileNames { diskname: "data/augu\\77e05d75-cbd0-4787-8a6a-abecb3fbca12.png.txt", realname: "Dexter_morgan.png", date: "2025-12-17", time: "10:54:59" }, 
+        FileNames { diskname: "data/augu\\e559d9bf-6522-47b1-a6c0-f7bdbb3121e5.png.txt", realname: "Dexter_morgan_2.png", date: "2025-12-17", time: "10:55:58" }, 
+        FileNames { diskname: "data/augu\\1cbe97fc-74fb-4cb2-987b-e018f636be41.png.txt", realname: "erm.png", date: "2025-12-17", time: "10:55:32" }]
+
+
+        not in the right order, why is that?
+*/
+    let mut sorted = Vec::new();
+    
+    for i in sorted_files{
+        sorted.push(i);
+    }
+    for i in sorted_folders{
+        sorted.push(i);
+    } 
+
+    println!("\n\nsorted upload time: {:?}", sorted); //could do better???
+
+    Ok(sorted)
+        
+}
+
+
+fn sort_fn(list: Vec<FileNames>) -> Vec<FileNames> {
+
+    let mut lower_list = Vec::new();
+    let mut lower_sorted = Vec::new();
+    let mut sorted = Vec::new();
+
+    for i in 0..list.len() {
+        lower_list.push(FileNames{
+            diskname: list[i].diskname.clone(),
+            realname: list[i].realname.clone().to_lowercase(),
+            date: list[i].date.clone(),
+            time: list[i].time.clone(),
+        })
+    }
+
     let mut breakpoint = false;
- 
-    // deci verifica fiecare element din lista ordonata si daca e mai mare o adauga dupa
-    // altfel trece la urmatorul pana la final
-    // si la inceput daca cuvantul e mai mic decat primul faci un edge case ca sa il adaugi inainte
 
-    //i did it wrong, just start from the end and go backwards as long the index of the words is smaller than the next(backwards mode) one
-    //implement in the morning of 14
-    for i in 0..sorting.len() {
-        let key = sorting[i].as_bytes();
-        println!("\nkey: {:?}", sorting[i]);
-        println!("len: {:?}", sorted.len());
+    for i in 0..list.len() {
+        let key = list[i].realname.as_bytes();
+
+        println!("\nkey: {:?}", list[i]);
+        // println!("len: {:?}", sorted.len());
         
         if sorted.len() == 0 {
-            sorted.push(sorting[i].clone());
+            lower_sorted.push(lower_list[i].clone()); 
+            sorted.push(list[i].clone());
+            println!("key index first word byte: {:?}", key[0]);
             println!("inserted first word");
             continue;
         }
 
         breakpoint = false;
+        println!("checking ");
 
-        for j in sorted.len()..0 {
-            println!("j: {}", j);
+        for j in (0..sorted.len()).rev(){
+            // println!("j: {}", j);
 
-            // if key[0] <
-            
-            // if j + 1 >= sorted.len() && key[0] < sorted[1].as_bytes()[0] && key[0] > sorted[0].as_bytes()[0] { //sorted = {"a", "c"}     "b"
-            //     sorted.push(sorting[i].clone());
-            //     break;
-            // } 
-            
-            for index in 0..key.len() {
-                println!("index: {}", index);
-                if (key.len() < sorted[j].len()) && (key[index] < sorted[j].as_bytes()[index]) {
-                    // print!("s  ");
-                    sorted.insert(j, sorting[i].clone());
-                    println!("stopped because small");
-                    breakpoint = true;
-                    break;
-                }
+            // println!("How is {:?} compared to {:?}", key[0], sorted[j].as_bytes()[0]);
+            // println!("How is {:?} compared to {:?}",String::from_utf8_lossy(&[key[0]]), String::from_utf8_lossy(&[sorted[j].as_bytes()[0]]));
 
-                if j == 0 && key[index] < sorted[j].as_bytes()[index] { //if begining is smaller but also higher in the hierarchy
-                    sorted.insert(j, sorting[i].clone());
-                    breakpoint = true;
-                    break;
-                }
-
-                if key[index] > sorted[j].as_bytes()[index] {
-                    sorted.insert(j + 1, sorting[i].clone());
-                    break;
-                }
-
-
-                // if index > sorted[j].len() { //cuvantul pe care il verificam e mai mare decat cel care este deja inauntru
-                //     sorted.insert(j, sorting[i].clone());
-                //     breakpoint = true;
-                //     break;
-                // }
-
-                // if key[index] > sorted[j].as_bytes()[index] {
-                //     sorted.insert(j + 1, sorting[i].clone());
-                //     breakpoint = true;
-                //     break;
-                // }
-                // if key[index] < sorted[j].as_bytes()[index]{
-                //     sorted.insert(j, sorting[i].clone());
-                //     breakpoint = true;
-                //     break;
-                // }
-
+            if key == lower_sorted[j].realname.as_bytes() {
+                lower_sorted.insert(j, lower_list[i].clone());
+                sorted.insert(j, list[i].clone());
+                break;
             }
-            //an=t the end after inserting the item
 
-            println!("not sorted: {:?}", sorted); //could do better???
+            if key[0] >= lower_sorted[j].realname.as_bytes()[0] {
+
+                for index in 0..key.len(){
+
+                    println!("key index byte: {:?}", key[index]);
+                    if index >= lower_sorted[j].realname.len() {
+                        lower_sorted.insert(j, lower_list[i].clone());
+                        sorted.insert(j, list[i].clone());
+                        breakpoint = true;
+                        break;
+                    }
+
+                    if key[index] < lower_sorted[j].realname.as_bytes()[index]{
+                        lower_sorted.insert(j, lower_list[i].clone());
+                        sorted.insert(j, list[i].clone());
+                        breakpoint = true;
+                        break;
+                    }
+
+                    if key[index] > lower_sorted[j].realname.as_bytes()[index]{
+                        lower_sorted.insert(j + 1, lower_list[i].clone());
+                        sorted.insert(j + 1, list[i].clone());
+                        breakpoint = true;
+                        break;
+                    }
+
+                }
+            } else if j == 0 && key[0] < lower_sorted[j].realname.as_bytes()[0]{
+                lower_sorted.insert(j, lower_list[i].clone());
+                sorted.insert(j, list[i].clone());
+                println!("key index byte: {:?}", list[i].realname.as_bytes()[0]);
+                break;
+            } 
+
+            // println!("not sorted: {:?}", sorted); //could do better???
 
             if breakpoint {
                 break;
@@ -769,15 +1080,227 @@ pub fn insert_sort() -> Result<Vec<String>, String> {
         }
     }
 
-    println!("sorted: {:?}", sorted); //could do better???
-    println!("len sorted: {}", sorted.len());
-    println!("len unsorted: {}", sorting.len());
-    Ok(sorted)
-        
-    
-
+    sorted
 }
 
+fn sort_fn_date(list: Vec<FileNames>) -> Vec<FileNames> {
+    println!("SORTING AFTER UPLOAD TIME");
+    let mut sorted = Vec::new();
+
+    let mut breakpoint = false;
+
+    for i in 0..list.len() {
+        let date = list[i].date.as_bytes();
+
+        println!("\nkey: {:?}", list[i]);
+        // println!("len: {:?}", sorted.len());
+        
+        if sorted.len() == 0 {
+            sorted.push(list[i].clone());
+            println!("key index first word byte: {:?}", date[0]);
+            println!("inserted first word");
+            continue;
+        }
+
+        breakpoint = false;
+        println!("checking ");
+
+        for j in (0..sorted.len()).rev(){
+            println!("checking again");
+            // println!("j: {}", j);
+
+            // println!("How is {:?} compared to {:?}", key[0], sorted[j].as_bytes()[0]);
+            // println!("How is {:?} compared to {:?}",String::from_utf8_lossy(&[key[0]]), String::from_utf8_lossy(&[sorted[j].as_bytes()[0]]));
+
+            // if date == sorted[j].date.as_bytes() {
+            //     sorted.insert(j, list[i].clone());
+            //     break;
+            // }
+
+            if date[0] >= sorted[j].date.as_bytes()[0] {
+
+                for index in 0..date.len(){
+                    let mut breakpoint2 = false;
+
+                    println!("date index byte: {:?}", date[index]);
+
+                    // debug this shit
+                    //doesnt sort as it should and idk why
+                    if date == sorted[j].date.as_bytes() {
+                        /* if list[i].time == sorted[j].time { //it's impossible this so imma leave it commented for now(i dont want another for loop in here)
+
+                        } */
+
+                        for l in 0..list[i].time.len(){
+                            if list[i].time.as_bytes()[l] < sorted[j].time.as_bytes()[l]{
+                                println!("{} is smaller than {}", list[i].time, sorted[j].time);
+                                println!("the digit that made the difference between {} and {} is {} < {}", list[i].time, sorted[j].time, list[i].time.as_bytes()[l], sorted[j].time.as_bytes()[l]);
+                                sorted.insert(j, list[i].clone());
+                                breakpoint2 = true;
+                                breakpoint = true;
+                                break;
+                            }
+
+                            if list[i].time.as_bytes()[l] > sorted[j].time.as_bytes()[l]{
+                                println!("{} is bigger than {}", list[i].time, sorted[j].time);
+                                println!("the digit that made the difference between {} and {} is {} > {}", list[i].time, sorted[j].time, list[i].time.as_bytes()[l], sorted[j].time.as_bytes()[l]);
+                                sorted.insert(j + 1, list[i].clone());
+                                breakpoint2 = true;
+                                breakpoint = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if date[index] < sorted[j].date.as_bytes()[index]{
+                        println!("\n\nIs the date smaller than the stored date");
+                        sorted.insert(j, list[i].clone());
+                        breakpoint = true;
+                        break;
+                    }
+
+                    if date[index] > sorted[j].date.as_bytes()[index]{
+                        println!("\n\nIs the date bigger than the stored date");
+                        sorted.insert(j + 1, list[i].clone());
+                        breakpoint = true;
+                        break;
+                    }
+
+                    if breakpoint2 == true {
+                        break;
+                    }
+
+                }
+            } else if j == 0 && date[0] < sorted[j].date.as_bytes()[0]{
+                println!("\n\nIs j = 0 and sorted bigger than the uploaded date, HUH?");
+                sorted.insert(j, list[i].clone());
+                println!("key index byte: {:?}", list[i].date.as_bytes()[0]);
+                break;
+            } 
+
+            // println!("not sorted: {:?}", sorted); //could do better???
+
+            if breakpoint {
+                break;
+            }
+        }
+    }
+
+    sorted
+}
+
+
+fn get_data_info(data:Vec<u8>) -> Result<(String, String, String), String> {
+    
+        let start = match memmem::find(&data[..], b"file_name:\"").map(|p| p as usize) {
+            Some(x) => x,
+            None => {
+                println!("The user's data file probably got corrupted");
+                match log("The user's data file probably got corrupted", 3){
+                    Ok(x) => x,
+                    Err(_e) => {
+                        // send_error_response(&mut stream, 400, &e);   
+                        return Err(String::from("Error logging"));
+                    } 
+                }
+                // return Err(String::from("Error reading the data file"));
+                return Err(String::from("The user's data file probably got corrupted"));
+            }
+        };
+
+        let data = &data[start + "file_name:\"".len()..];
+        let end = match memmem::find(&data[..], b"\"").map(|p| p as usize) {
+            Some(x) => x,
+            None => {
+                println!("The user's data file probably got corrupted");
+                match log("The user's data file probably got corrupted", 3){
+                    Ok(x) => x,
+                    Err(_e) => {
+                        // send_error_response(&mut stream, 400, &e);   
+                        return Err(String::from("Error logging"));
+                    } 
+                }
+                // return Err(String::from("Error reading the data file"));
+                return Err(String::from("The user's data file probably got corrupted"));
+            }
+        };
+        let name = &data[.. end ];
+
+        let start = match memmem::find(&data[..], b"date:\"").map(|p| p as usize) {
+            Some(x) => x,
+            None => {
+                println!("The user's data file probably got corrupted");
+                match log("The user's data file probably got corrupted", 3){
+                    Ok(x) => x,
+                    Err(_e) => {
+                        // send_error_response(&mut stream, 400, &e);   
+                        return Err(String::from("Error logging"));
+                    } 
+                }
+                // return Err(String::from("Error reading the data file"));
+                return Err(String::from("The user's data file probably got corrupted"));
+            }
+        };
+
+        let data = &data[start + "date:\"".len()..];
+        let end = match memmem::find(&data[..], b"\"").map(|p| p as usize) {
+            Some(x) => x,
+            None => {
+                println!("The user's data file probably got corrupted");
+                match log("The user's data file probably got corrupted", 3){
+                    Ok(x) => x,
+                    Err(_e) => {
+                        // send_error_response(&mut stream, 400, &e);   
+                        return Err(String::from("Error logging"));
+                    } 
+                }
+                // return Err(String::from("Error reading the data file"));
+                return Err(String::from("The user's data file probably got corrupted"));
+            }
+        };
+        let date = &data[.. end];
+
+        let start = match memmem::find(&data[..], b"time:\"").map(|p| p as usize) {
+            Some(x) => x,
+            None => {
+                println!("The user's data file probably got corrupted");
+                match log("The user's data file probably got corrupted", 3){
+                    Ok(x) => x,
+                    Err(_e) => {
+                        // send_error_response(&mut stream, 400, &e);   
+                        return Err(String::from("Error logging"));
+                    } 
+                }
+                // return Err(String::from("Error reading the data file"));
+                return Err(String::from("The user's data file probably got corrupted"));
+            }
+        };
+
+        let data = &data[start + "time:\"".len()..];
+        let end = match memmem::find(&data[..], b"\"").map(|p| p as usize) {
+            Some(x) => x,
+            None => {
+                println!("The user's data file probably got corrupted");
+                match log("The user's data file probably got corrupted", 3){
+                    Ok(x) => x,
+                    Err(_e) => {
+                        // send_error_response(&mut stream, 400, &e);   
+                        return Err(String::from("Error logging"));
+                    } 
+                }
+                // return Err(String::from("Error reading the data file"));
+                return Err(String::from("The user's data file probably got corrupted"));
+            }
+        };
+        let time = &data[.. end];
+
+        return Ok((
+            String::from_utf8_lossy(&name[..]).to_string(),
+            String::from_utf8_lossy(&date[..]).to_string(),
+            String::from_utf8_lossy(&time[..]).to_string(),
+        ))
+
+}
 //more to come
 pub const MAX_UPLOAD_SIZE: usize = 100 * 1024 * 1024; // 100MB
 

@@ -16,132 +16,32 @@
                     return String::from("");
                 }
             };
-        // transform this uploads/figet/smashbros/dump%20me 
-        // in this uploads/figet/smashbros/dump me 
-        
-        println!("WEB\n\n\nDefinetly able to enter this folder: uploads/{}", 
-                percent_decode_str(&*folder)
-                    .decode_utf8_lossy()
-                    .replace("+", " ")
-                    .to_owned()
-                );
-        let folder2 = folder.clone();
 
-        let binding = decode_windows_1255(&folder2.into_bytes()[..]);
-        let folder2 = percent_decode_str(&*binding).decode_utf8_lossy().to_string().into_bytes();
-        let folder2 = decode_windows_1255(&folder2[..]);
+        let sorting_option = 1; //e.g. alphabetical, uploaded time, type, size 
+        let mut sorted = match sorting_option {
+            0 => alfabetical_order(folder.to_string()),
+            1 => upload_order(folder.to_string()),
+            _ => alfabetical_order(folder.to_string()),
+        };
 
-        let data_entries = match fs::read_dir(format!("data/{}", folder2)){
+        let sorted = match sorted {
             Ok(x) => x,
             Err(e) => {
-                println!("Unnable to read the folder\n{}", e);
-                match log(&format!("Error reading the folder: {}", e), 3){
+                println!("There was a problem sorting the files: {}", e);
+                match log(&format!("There was a problem sorting the files: {}", e), 3){
                     Ok(x) => x,
                     Err(_e) => {
                         // send_error_response(&mut stream, 400, &e);   
                         return String::from("");
                     } 
                 }
-                // send_error_response(&mut stream, 404, "Unnable to locate your folder with files, try logging in again");
+                // send_error_response(&mut stream, 500, "There is a problem that we dont know how u got here");
                 return String::from("");
             }
         };
 
-        let entries = match fs::read_dir(format!("uploads/{}", folder2)){
-            Ok(x) => x,
-            Err(e) => {
-                println!("Unnable to read the folder\n{}", e);
-                match log(&format!("Error reading the uploads folder: {}", e), 3){
-                    Ok(x) => x,
-                    Err(_e) => {
-                        // send_error_response(&mut stream, 400, &e);   
-                        return String::from("");
-                    } 
-                }
-                // send_error_response(&mut stream, 404, "Unnable to locate your folder with files, try logging in again");
-                return String::from("");
-            }
-        };
-
-        // println!("folder checking: {}", folder);
+        println!("\nsorted: {:?}", sorted); //could do better???
         
-        let mut file_names = Vec::new();
-
-        let mut files = Vec::new();
-
-        for entry in entries {
-            let entry = match entry{
-                Ok(x) => x,
-                Err(e) => {
-                    println!("No users uploads found\n{:?}", e);
-                    match log(&format!("Error with getting the file's entryes: {}", e), 1){
-                        Ok(x) => x,
-                        Err(_e) => {
-                            // send_error_response(&mut stream, 400, &e);   
-                            return String::from("");
-                        } 
-                    }
-                    // send_error_response(&mut stream, 404, "There is a problem accessing your uploads, try again later");
-                    return String::from("");
-                }
-            };
-            files.push(entry.path());
-            let file_name = match entry.file_name().into_string(){
-                Ok(x) => x,
-                Err(e) => {
-                    println!("The user's filename is unnable to be converted to string\n{:?}", e);
-                    match log(&format!("Error converting the filename in a UTF-8 format: {:?}", e), 1){
-                        Ok(x) => x,
-                        Err(_e) => {
-                            // send_error_response(&mut stream, 400, &e);  
-                            return String::from("");
-                        } 
-                    }
-                    return String::from("");
-                }
-            };
-            file_names.push(file_name);
-        }
-
-        let mut data_file_names = Vec::new();
-        let mut data_files = Vec::new();
-
-        for entry in data_entries {
-            let entry = match entry{
-                Ok(x) => x,
-                Err(e) => {
-                    println!("No users uploads found\n{:?}", e);
-                    match log(&format!("Error in finding uploaded files: {}", e), 1){
-                        Ok(x) => x,
-                        Err(_e) => {
-                            // send_error_response(&mut stream, 400, &e);   
-                            return String::from("");
-                        } 
-                    }
-                    // send_error_response(&mut stream, 404, "There is a problem accessing your uploads, try again later");
-                    return String::from("");
-                }
-            };
-
-            data_files.push(entry.path());
-            let file_name = match entry.file_name().into_string(){
-                Ok(x) => x,
-                Err(e) => {
-                    println!("The user's username is unnable to be converted to string\n{:?}", e);
-                    match log(&format!("Error converting the filename in a UTF-8 format: {:?}", e), 1){
-                        Ok(x) => x,
-                        Err(_e) => {
-                            // send_error_response(&mut stream, 400, &e);   
-                            return String::from("");
-
-                        } 
-                    }
-                    // send_error_response(&mut stream, 404, "The user contains illegitimate characters");
-                    return String::from("");
-                }
-            };
-            data_file_names.push(file_name);
-        }
 
         let mut html = String::from(
             "    
@@ -281,8 +181,8 @@
         ");
 
         let file_folder = &folder;
-        for i in 0..file_names.len() {
-            if !files[i].is_file() {
+        for i in 0..sorted.len() {
+            if !sorted[i].diskname.is_file() {
             
                 html.push_str(&*format!(
                     "<li>
@@ -316,69 +216,19 @@
                             <button onclick=\"window.location.href='/open_folder/{}'\">Open folder</button>
                         </div>
                     </li>",
-                    file_names[i],
+                    sorted[i].realname,
                     i,
-                    file_names[i],
-                    file_names[i],
-                    file_names[i],
-                    file_names[i],
-                    file_names[i]
+                    sorted[i].diskname.display(),
+                    sorted[i].diskname.display(),
+                    sorted[i].diskname.display(),
+                    sorted[i].diskname.display(),
+                    sorted[i].diskname.display()
                 ));
             } else {
                 // println!("file: {:?}", file_names[i]);
                 // println!("filejs: {}", files[i].display());
 
-                println!("folders: {}", folder);
-
-                let mut file_data = match fs::File::open(format!("data/{}/{}.txt",file_folder, file_names[i])){
-                    Ok(x) => x,
-                    Err(e) => {
-                        println!("The user's uploads folder cannot be read\n{}\n{}", e, file_names[i]);
-                        match log(&format!("Error reading from the upload's folder: {}", e), 3){
-                            Ok(x) => x,
-                            Err(_e) => {
-                                // send_error_response(&mut stream, 400, &e);   
-                                return String::from("");
-                            } 
-                        }
-                        // send_error_response(&mut stream, 404, "We are unnable to locate your file, please try again later");
-                        return String::from("");
-                    }
-                };
-                let mut read = Vec::new();
-                match file_data.read_to_end(&mut read) {
-                    Ok(x) => x,
-                    Err(e) => {
-                        println!("There was an error reading the file data\n{}\n{}", e, file_names[i]);
-                        match log(&format!("Error reading from the data's folder: {}", e), 3){
-                            Ok(x) => x,
-                            Err(_e) => {
-                                // send_error_response(&mut stream, 400, &e);   
-                                return String::from("");
-                            } 
-                        }
-                        // send_error_response(&mut stream, 400, "THere was an error getting the file's data, please come back later");
-                        return String::from("");
-                    }
-                };
-
-                let file_disk_name = match memmem::find(&read[..], b"file_name:\"").map(|p| p as usize){
-                    Some(x) => x,
-                    None => {
-                        println!("The file data got corrupted {}", file_names[i]);
-                        match log("Error reading the original filename's name", 3){
-                            Ok(x) => x,
-                            Err(_e) => {
-                                // send_error_response(&mut stream, 400, &e);   
-                                return String::from("");
-                            } 
-                        }
-                        // send_error_response(&mut stream, 400, "The file data got corrupted, please try reuploading it");
-                        return String::from("");
-                    }
-                };
-                let file_disk_name = &read[file_disk_name + "file_name:\"".len() .. read.len() - 1];
-                let name = String::from_utf8_lossy(&file_disk_name[..]);
+                println!("File: {}", folder);
 
                 html.push_str(&*format!(
                     "<li> 
@@ -403,12 +253,12 @@
                                 </form>
                             </div>
                         ",
-                    name, 
+                    sorted[i].realname, 
                     i, 
-                    file_names[i], 
-                    file_names[i]
+                    sorted[i].diskname.display(), 
+                    sorted[i].diskname.display()
                 ));
-                let mut content_type_file = match fs::File::open(data_files[i].clone()){
+                let mut content_type_file = match fs::File::open(sorted[i].diskname.clone()){
                     Ok(x) => x,
                     Err(e) => {
                         println!("The user's uploads folder cannot be read\n{:?}", e);
@@ -457,7 +307,7 @@
                 if IMAGE_TYPES.contains(&&*c_type) {
                     html.push_str(&format!("
                         <img src={} alt =\"IDFK\" style=\"max-width: 300px; \" >",
-                        files[i].display()
+                        sorted[i].diskname.display()
                     ));
                     // println!("image showing");
                 } //then check for videos, text and all the other
@@ -467,7 +317,7 @@
                             <source src=\"{}\" type=\"{}\">
                             Your browser doesnt support my video :'(
                         </video>
-                    ",  files[i].display(),
+                    ",  sorted[i].diskname.display(),
                         c_type
                     ));
                     // println!("Video showing");

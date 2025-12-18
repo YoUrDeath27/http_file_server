@@ -53,6 +53,8 @@ use security::*;
     so i can better see the workflow ig? but then there wil be a problem if i get 2 requests at the same time and both for different things but they get processed at the same time
 
     -make in web so that they get sorted based on filename in data nu cel salvat ca sa arate bine (cred ca s-ar incadra in utils sa fac functia si in web doar sa trimit lista)
+
+    -i think i need to make the sorting function work with javascript.... wish me luck (or maybe not wait a sec)
     
     good luck
 
@@ -74,8 +76,19 @@ fn main() {
     // let datetime: DateTime<Local> = Local::now();
     // println!("time: {}", datetime);
     
-    // sort_name();
-    insert_sort();
+    // bubble_sort();
+    // println!("\n\n\nerror: {:?}", insert_sort());
+    println!("Time? {:?}", Instant::now());
+    println!("Time? {:?}", Duration::from_secs(2000));
+    println!("Time? {:?}", Instant::now() + Duration::from_secs(2000));
+    println!("Time? {:?}", Local::now());
+    
+    /*
+        Time? Instant { t: 453.7383204s }
+        Time? Instant { t: 474.4293796s }
+        Time? Instant { t: 492.5384597s }
+
+     */
 
     println!("Choose on which ip the server to listen to \n(e.g. 127.0.0.1:7878)");
     println!("ps: press enter to go with the default");
@@ -219,18 +232,22 @@ fn handle_connection(mut stream: TcpStream) {
         };
 
         let rn = memmem::find(&received_data[content_count + "Content-Length: ".len()..], b"\r\n").map(|p| p as usize).unwrap();
-        let cc =&received_data[content_count + "Content-Length: ".len()..] ;
+        let cc =&received_data[content_count + "Content-Length: ".len()..];
+        // println!("content count : {:?}", String::from_utf8_lossy(&cc[..]));
         let content_count: usize =  match std::str::from_utf8(&cc[..rn])
                                                 .expect("Not a valid UTF-8")
                                                 .trim()
                                                 .parse() {
                                                     Ok(x) => x,
-                                                    Err(e) => { 
-                                                        println!("There is no content here {}\n\n", e); 
-                                                        0
+                                                    Err(e) => {
+                                                        println!("There is no content here: {}\n\n", e); 
+                                                        9999999999 //or some other arbitrary big fucking number
                                                     }
                                                 };
-                                                
+        if content_count == 9999999999 && memmem::find(request.body.as_ref().unwrap(), b"GET ").is_some() {
+            send_error_response(&mut stream, 400, &format!("There was a problem uploading your file, please try again later"));   
+            return;
+        }                              
 
 
         request.body.as_mut().unwrap().extend_from_slice(&received_data[end + "\r\n\r\n".len()..]);
@@ -239,10 +256,10 @@ fn handle_connection(mut stream: TcpStream) {
             true
         } else if is_post {
             memmem::find(&received_data, b"Content-Length").is_some() && 
-            request.body.as_ref().unwrap().len() == content_count
+            request.body.as_ref().unwrap().len() == content_count //i got no clue why i did thi 18.30.25
         } else {
             false
-            //check if there is a form for loging in
+            //check if there is a form for loging in //how tf am i supposed to do this past me?
             //and at the last possible moment return false
         };
 
