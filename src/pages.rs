@@ -18,11 +18,12 @@
             };
 
         let sorting_option = 1; //e.g. alphabetical, uploaded time, type, size 
-        let mut sorted = match sorting_option {
-            0 => alfabetical_order(folder.to_string()),
-            1 => upload_order(folder.to_string()),
-            _ => alfabetical_order(folder.to_string()),
-        };
+        let mut sorted = sorting(sorting_option, folder.to_string());
+        // match sorting_option {
+        //     0 => alfabetical_order(folder.to_string()),
+        //     1 => upload_order(folder.to_string()),
+        //     _ => alfabetical_order(folder.to_string()),
+        // };
 
         let sorted = match sorted {
             Ok(x) => x,
@@ -181,8 +182,8 @@
         ");
 
         let file_folder = &folder;
-        for i in 0..sorted.len() {
-            if !sorted[i].diskname.is_file() {
+        for i in 0..sorted.len() {  
+            if !sorted[i].is_file {
             
                 html.push_str(&*format!(
                     "<li>
@@ -218,11 +219,11 @@
                     </li>",
                     sorted[i].realname,
                     i,
-                    sorted[i].diskname.display(),
-                    sorted[i].diskname.display(),
-                    sorted[i].diskname.display(),
-                    sorted[i].diskname.display(),
-                    sorted[i].diskname.display()
+                    sorted[i].diskname.replace("\\", "/"),
+                    sorted[i].diskname.replace("\\", "/"),
+                    sorted[i].diskname.replace("\\", "/"),
+                    sorted[i].diskname.replace("\\", "/"),
+                    sorted[i].diskname.replace("\\", "/")
                 ));
             } else {
                 // println!("file: {:?}", file_names[i]);
@@ -255,8 +256,8 @@
                         ",
                     sorted[i].realname, 
                     i, 
-                    sorted[i].diskname.display(), 
-                    sorted[i].diskname.display()
+                    sorted[i].uploads, 
+                    sorted[i].uploads
                 ));
                 let mut content_type_file = match fs::File::open(sorted[i].diskname.clone()){
                     Ok(x) => x,
@@ -277,6 +278,7 @@
                 match content_type_file.read_to_string(&mut content_type){
                     Ok(x) => x, 
                     Err(e) => {
+                        println!("error: {}", e);
                         match log(&format!("{}", e), 3){
                             Ok(x) => x,
                             Err(e) => {
@@ -307,7 +309,7 @@
                 if IMAGE_TYPES.contains(&&*c_type) {
                     html.push_str(&format!("
                         <img src={} alt =\"IDFK\" style=\"max-width: 300px; \" >",
-                        sorted[i].diskname.display()
+                        sorted[i].uploads
                     ));
                     // println!("image showing");
                 } //then check for videos, text and all the other
@@ -317,7 +319,7 @@
                             <source src=\"{}\" type=\"{}\">
                             Your browser doesnt support my video :'(
                         </video>
-                    ",  sorted[i].diskname.display(),
+                    ",  sorted[i].uploads,
                         c_type
                     ));
                     // println!("Video showing");

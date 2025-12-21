@@ -459,7 +459,7 @@ pub fn delet(mut stream: TcpStream, filename: String, buffer: Request) {
                     }
                 }.replace("+", " ");
 
-                // println!("filename suppoised to get deleted= uploads/{}/{}", folder1, filename);
+                println!("filename suppoised to get deleted= uploads/{}/{}", folder1, filename);
 
                 match fs::remove_file(&*format!("uploads/{}/{}", folder1, filename)) {
                     Ok(x) => x,

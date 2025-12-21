@@ -3,6 +3,7 @@ use memchr::memmem;
 use percent_encoding::percent_decode_str;
 use std::{
     fs,
+    fs::DirEntry,
     sync::Mutex,
     path::{Path, PathBuf},
     io::{Read, Write, Error},
@@ -19,6 +20,8 @@ use walkdir::WalkDir;
 
 use encoding::all::WINDOWS_1252;
 use encoding::{DecoderTrap, Encoding};
+
+use colored::Colorize;
 
 use uuid::{Uuid};
 
@@ -78,10 +81,21 @@ fn main() {
     
     // bubble_sort();
     // println!("\n\n\nerror: {:?}", insert_sort());
-    println!("Time? {:?}", Instant::now());
-    println!("Time? {:?}", Duration::from_secs(2000));
-    println!("Time? {:?}", Instant::now() + Duration::from_secs(2000));
-    println!("Time? {:?}", Local::now());
+    // println!("Time? {:?}", Instant::now());
+    // println!("Time? {:?}", Duration::from_secs(2000));
+    // println!("Time? {:?}", Instant::now() + Duration::from_secs(2000));
+    // println!("Time? {:?}", Local::now());
+
+    let mut string = format!( //funny thing but doesnt do shit in log file
+        "{} {} {}",
+        "or use".cyan(),
+        "any".italic().yellow(),
+        "string type".cyan()
+    );
+
+    string.push_str(&*"! hello".cyan().to_string());
+
+    // println!("{string}");
     
     /*
         Time? Instant { t: 453.7383204s }
@@ -576,6 +590,7 @@ fn post_action(mut stream: TcpStream, buffer: Request, action: usize) {
         let filename = percent_decode_str(&*String::from_utf8_lossy(&filename[..]))
             .decode_utf8_lossy()
             .replace("+", " ");
+        println!("filename after decoding: {}", filename);
 
         if path_traversal_check(&filename) {
 

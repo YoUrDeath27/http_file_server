@@ -19,6 +19,8 @@ serde = "1.0.228"
 
 chrono = "0.4.42"
 
+colored = "3"
+
 [dependencies.uuid]
 version = "1.18.1"
 # Lets you generate random UUIDs
