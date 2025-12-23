@@ -119,7 +119,7 @@
         </form> 
 
         <form action\"/\" method=\"POST\">
-            <input type=\"hidden\" name=\"action\" value=\"ADD_FOLDER\">
+            <input type=\"hidden\" name=\"**action\" value=\"ADD_FOLDER\">
             <input type=\"text\" name=\"filename\" required>
             <button type=\"submit\">Add Folder </button>
         </form> "
@@ -144,25 +144,27 @@
                     return String::from("");
                 }
             };
+            println!("breadcrumb: {}", String::from_utf8_lossy(&user[..]));
             let user = &user[..end];
 
             let folder_b = &user_folder[user.len()..];
             let user_folder = String::from_utf8_lossy(&folder_b[..]);
             // println!("folder that im currently in= {}", user_folder);
+            println!("breadcrumb2: {}", user_folder);
 
             if &user_folder != ""  {         //911 joke incoming //it was on line 911 at the time of writing that comment
                 let breadcrumb = memmem::rfind(&folder_b[..], b"/").map(|p| p as usize).unwrap();
                 let parent_folder = &folder_b[..breadcrumb];
+
+                println!("breadcrumb3: {}", String::from_utf8_lossy(&parent_folder[..]));
+
                 html.push_str(&*format!(
                     "
                     Location: {}
                     <br>
                     <button onclick=\"window.location.href='/'\">Go back to home</button>
                     ",
-                    percent_decode_str(&folder)
-                    .decode_utf8_lossy()
-                    .replace("+", " ")
-                    .to_owned()
+                    String::from_utf8_lossy(&user_folder.as_bytes()[1..])
                 ));
                 if !parent_folder.is_empty() {
                     html.push_str(&*format!(
@@ -197,19 +199,19 @@
                         <div id=\"options\" style=\"display: none; z-index: 10\">
                             <div style=\"display: block;  margin:0 10px 0 0;\">
                                 <form action=\"/\" method =\"POST\">
-                                    <input type=\"hidden\" name=\"action\" value=\"DELETE\">
+                                    <input type=\"hidden\" name=\"**action\" value=\"DELETE\">
                                     <input type=\"hidden\" name=\"folder\" value=\"{}\">
                                     <input type=\"hidden\" name=\"filename\" value=\"{}\">
                                     <button type=\"submit\">Delete</button>
                                 </form>
                                 <form action=\"/\" method =\"POST\">
-                                    <input type=\"hidden\" name=\"action\" value=\"RENAME_FOLDER\">
+                                    <input type=\"hidden\" name=\"**action\" value=\"RENAME_FOLDER\">
                                     <input type=\"hidden\" name=\"filename\" value=\"{}\">
                                     <input type=\"text\" name=\"newFile\">
                                     <button type=\"submit\">Rename</button>
                                 </form>
                                 <form action=\"/\" method=\"POST\">
-                                    <input type=\"hidden\" name=\"action\" value=\"DOWNLOAD_FOLDER\">
+                                    <input type=\"hidden\" name=\"**action\" value=\"DOWNLOAD_FOLDER\">
                                     <input type=\"hidden\" name=\"filename\" value=\"{}\">
                                     <button type=\"submit\">Download as ZIP</button>
                                 </form>
@@ -219,11 +221,11 @@
                     </li>",
                     sorted[i].realname,
                     i,
-                    sorted[i].diskname.replace("\\", "/"),
-                    sorted[i].diskname.replace("\\", "/"),
-                    sorted[i].diskname.replace("\\", "/"),
-                    sorted[i].diskname.replace("\\", "/"),
-                    sorted[i].diskname.replace("\\", "/")
+                    sorted[i].folder, //folder aka augu/if/there/is/smth/else  without filename
+                    sorted[i].datapath,
+                    sorted[i].folder, //same here
+                    sorted[i].datapath,
+                    sorted[i].realname //the name of the folder
                 ));
             } else {
                 // println!("file: {:?}", file_names[i]);
@@ -243,12 +245,12 @@
                         <div id=\"options\" style=\"display:none; z-index: 10\">
                             <div style=\"margin:0 10px 0 0;\">
                                 <form action=\"/\" method =\"POST\">
-                                    <input type=\"hidden\" name=\"action\" value=\"DELETE\">
+                                    <input type=\"hidden\" name=\"**action\" value=\"DELETE\">
                                     <input type=\"hidden\" name=\"filename\" value=\"{}\">
                                     <button type=\"submit\"> Delete </button>
                                 </form>
                                 <form action=\"/\" method =\"POST\">
-                                    <input type=\"hidden\" name=\"action\" value=\"DOWNLOAD\">
+                                    <input type=\"hidden\" name=\"**action\" value=\"DOWNLOAD\">
                                     <input type=\"hidden\" name=\"filename\" value=\"{}\">
                                     <button type=\"submit\"> DOWNLOAD </button>
                                 </form>
@@ -256,10 +258,10 @@
                         ",
                     sorted[i].realname, 
                     i, 
-                    sorted[i].uploads, 
-                    sorted[i].uploads
+                    sorted[i].uploadsname, 
+                    sorted[i].uploadsname
                 ));
-                let mut content_type_file = match fs::File::open(sorted[i].diskname.clone()){
+                let mut content_type_file = match fs::File::open(sorted[i].datapath.clone()){
                     Ok(x) => x,
                     Err(e) => {
                         println!("The user's uploads folder cannot be read\n{:?}", e);
@@ -309,7 +311,7 @@
                 if IMAGE_TYPES.contains(&&*c_type) {
                     html.push_str(&format!("
                         <img src={} alt =\"IDFK\" style=\"max-width: 300px; \" >",
-                        sorted[i].uploads
+                        sorted[i].uploadspath
                     ));
                     // println!("image showing");
                 } //then check for videos, text and all the other
@@ -319,7 +321,7 @@
                             <source src=\"{}\" type=\"{}\">
                             Your browser doesnt support my video :'(
                         </video>
-                    ",  sorted[i].uploads,
+                    ",  sorted[i].uploadspath,
                         c_type
                     ));
                     // println!("Video showing");
@@ -451,7 +453,7 @@
                 <h3> It seems you are not currently connected to an account <br> Please Signup or Login to use this platform<h3>
             <h4> Username: </h4>
             <form action=\"/\" method=\"POST\">
-                <input type=\"text\" name=\"account\">
+                <input type=\"text\" name=\"**account\">
                 <button type=\"submit\"> Continue </button>
             </form>
             </body>
@@ -476,7 +478,7 @@
                 <h4> Password: </h4>
             <form action=\"/\" method=\"POST\">
                 <input type=\"hidden\" name=\"user\" value=\"{}\">
-                <input type=\"text\" name=\"password\">
+                <input type=\"text\" name=\"**password\">
                 <button type=\"submit\"> Login/Signup </button>
             </form>
             <br><br>

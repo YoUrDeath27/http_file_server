@@ -55,9 +55,10 @@ use security::*;
     si log everything in the file, that can be logged ofc
     so i can better see the workflow ig? but then there wil be a problem if i get 2 requests at the same time and both for different things but they get processed at the same time
 
-    -make in web so that they get sorted based on filename in data nu cel salvat ca sa arate bine (cred ca s-ar incadra in utils sa fac functia si in web doar sa trimit lista)
+    -in SHOW_FOLDER nu ar fi mai bine sa verificam daca utilizatorul este autentificat prin a lua acel cookie in loc sa verificam daca e pe server trecut?
 
-    -i think i need to make the sorting function work with javascript.... wish me luck (or maybe not wait a sec)
+    -redesign the front end (pls)
+
     
     good luck
 
@@ -548,11 +549,11 @@ fn get_method(mut stream: TcpStream, request: Request) {
 }
 
 fn post_method(stream: TcpStream, buffer: Request) {
-    if let Some(action) = memmem::find(&buffer.body.clone().unwrap()[..], b"action=").map(|p| p as usize) {
+    if let Some(action) = memmem::find(&buffer.body.clone().unwrap()[..], b"**action=").map(|p| p as usize) {
         post_action(stream, buffer, action);
-    } else if let Some(_) = memmem::find(&buffer.body.clone().unwrap()[..], b"account=").map(|p| p as usize){
+    } else if let Some(_) = memmem::find(&buffer.body.clone().unwrap()[..], b"**account=").map(|p| p as usize){
         auth_user(stream, buffer);
-    } else if let Some(_) = memmem::find(&buffer.body.clone().unwrap()[..], b"password=").map(|p| p as usize) {
+    } else if let Some(_) = memmem::find(&buffer.body.clone().unwrap()[..], b"**password=").map(|p| p as usize) {
         auth_pass(stream, buffer);
     } else {
         upload_file(stream, buffer);

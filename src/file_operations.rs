@@ -387,7 +387,7 @@ pub fn rename_folder(mut stream: TcpStream, buffer: Request, old_folder: String,
 
 pub fn delet(mut stream: TcpStream, filename: String, buffer: Request) {
         
-        { 
+    { 
         let folder = match SHOW_FOLDER.lock(){
             Ok(x) => x,
             Err(e) => {
@@ -461,7 +461,7 @@ pub fn delet(mut stream: TcpStream, filename: String, buffer: Request) {
 
                 println!("filename suppoised to get deleted= uploads/{}/{}", folder1, filename);
 
-                match fs::remove_file(&*format!("uploads/{}/{}", folder1, filename)) {
+                match fs::remove_file(&*format!("./uploads/{}/{}", folder1, filename)) {
                     Ok(x) => x,
                     Err(e) => {
                         match log(&format!("{}", e), 3){
@@ -477,7 +477,7 @@ pub fn delet(mut stream: TcpStream, filename: String, buffer: Request) {
                     return;    
                     }
                 }; //dont u dare change this shi
-                match fs::remove_file(&*format!("data/{}/{}.txt", folder1, filename)) {
+                match fs::remove_file(&*format!("./data/{}/{}.txt", folder1, filename)) {
                     Ok(x) => x,
                     Err(e) => {
                         match log(&format!("{}", e), 3){
@@ -496,7 +496,7 @@ pub fn delet(mut stream: TcpStream, filename: String, buffer: Request) {
             } else {
                 
                 // println!("deleting file={}/{}",folder1, filename);
-                match fs::remove_file(&*format!("uploads/{}/{}", folder1, filename)) {
+                match fs::remove_file(&*format!("./uploads/{}/{}", folder1, filename)) {
                     Ok(x) => x,
                     Err(e) => {
                         match log(&format!("{}", e), 3){
@@ -508,11 +508,11 @@ pub fn delet(mut stream: TcpStream, filename: String, buffer: Request) {
                             }
                         }
 
-                    send_error_response(&mut stream, 400, "Failed to delete the file");
+                    send_error_response(&mut stream, 400, &format!("Failed to delete the file uploads ./uploads/{}/{}",folder1, filename));
                     return;    
                     }
                 }; //dont u dare change this shi
-                match fs::remove_file(&*format!("data/{}/{}.txt", folder1, filename)) {
+                match fs::remove_file(&*format!("./data/{}/{}.txt", folder1, filename)) {
                     Ok(x) => x,
                     Err(e) => {
                         match log(&format!("{}", e), 3){
@@ -539,7 +539,7 @@ pub fn delet(mut stream: TcpStream, filename: String, buffer: Request) {
             send_error_response(&mut stream, 403, "Somehow you are not logged in");
             return;
         } 
-    }
+    };
 
     let status_line = "HTTP/1.1 200 OK\r\n";
 

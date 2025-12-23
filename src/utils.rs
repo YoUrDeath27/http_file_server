@@ -675,9 +675,12 @@ pub fn bubble_sort() -> Result<Vec<String>, String> {
 
 #[derive(Clone, Debug)]
 pub struct FileNames{
-    pub diskname: String, //path for detecting if it's a file or folder
-    pub uploads: String,
-    pub realname: String,   //name used for sorting
+    pub datapath: String,   //augu/sigma/1003-19-129.txt.txt
+    pub dataname: String,   // 1003-19-129.txt.txt
+    pub uploadspath: String,    //augu/sigma/1003-19-129.txt
+    pub uploadsname: String,    //1003-19-129.txt
+    pub realname: String,   // text.txt
+    pub folder: String,
     pub date: String,
     pub time: String,
     pub is_file: bool,
@@ -689,9 +692,12 @@ impl FileNames {
 
     pub fn new() -> Self {
         FileNames{
-            diskname: String::from(""),
-            uploads: String::from(""),
+            datapath: String::from(""),
+            dataname: String::from(""),
+            uploadspath: String::from(""),
+            uploadsname: String::from(""),
             realname: String::from(""),
+            folder: String::from(""),
             date: String::from(""),
             time: String::from(""),
             is_file: false,
@@ -818,34 +824,9 @@ pub fn sorting(how: u8, user: String) -> Result<Vec<FileNames>, String> {
 
         //if able to open file then search to get the file name
 
-        let mut upld_path = String::from("");
+        let mut upld_path = String::from(&format!("uploads/{}/{}", user, file_name)); //for folders
         let data = match fs::read(format!("data/{}/{}", user, file_name)){
-            Ok(x) => {
-                //create the uploads path
-                // names.push(FileNames::new());
-
-                let end = match memmem::rfind(&file_name.as_bytes()[..], b".txt").map(|p| p as usize){
-                    Some(x) => x,
-                    None => {
-                        println!("oke this shit is impossible");
-                        match log("There was a mixup with where the files are supposed to go ig", 3){
-                            Ok(x) => x,
-                            Err(_e) => {
-                                // send_error_response(&mut stream, 400, &e);   
-                                return Err(String::from("Error logging"));
-                            } 
-                        }
-                        return Err(String::from("The wrong file format has been found"));
-                    }
-                };
-                
-                let name = String::from_utf8_lossy(&file_name.as_bytes()[..end]);
-                upld_path = String::from(&format!("uploads/{}/{}", user, name));
-                println!("attempted upload path: {}", upld_path);
-
-                // names[i].ins_disk(upld_path.to_string());
-                x
-            },
+            Ok(x) => x,
             Err(e) => {
                 println!("The user's data file cannot be read\n{:?}", e);
                 match log(&format!("The user's data file cannot be read\n{:?}", e), 3){
@@ -855,11 +836,15 @@ pub fn sorting(how: u8, user: String) -> Result<Vec<FileNames>, String> {
                         return Err(String::from("Error logging"));
                     } 
                 }
-                
+
+                let fold = String::from_utf8_lossy(&upld_path.as_bytes()[..upld_path.len() - (file_name.len() + 1)]);
                 folders.push(FileNames{
-                    diskname: entry.path().display().to_string(),
-                    uploads: entry.path().display().to_string(),
-                    realname: file_name,
+                    datapath: entry.path().display().to_string().replace("\\", "/"),
+                    dataname: file_name.clone(),
+                    uploadspath: upld_path.to_string(),
+                    uploadsname: file_name.to_string(),
+                    realname: file_name.clone(),
+                    folder: fold.to_string(),
                     date: String::from(""),
                     time: String::from(""),
                     is_file: false,
@@ -870,6 +855,27 @@ pub fn sorting(how: u8, user: String) -> Result<Vec<FileNames>, String> {
                 // vec![0u8; 0]
             }
         };
+
+        
+        let end = match memmem::rfind(&file_name.as_bytes()[..], b".txt").map(|p| p as usize){
+            Some(x) => x,
+            None => {
+                println!("oke this shit is impossible");
+                match log("There was a mixup with where the files are supposed to go ig", 3){
+                    Ok(x) => x,
+                    Err(_e) => {
+                        // send_error_response(&mut stream, 400, &e);   
+                        return Err(String::from("Error logging"));
+                    } 
+                }
+                return Err(String::from("The wrong file format has been found"));
+            }
+        };
+        
+        let upld_name = String::from_utf8_lossy(&file_name.as_bytes()[..end]);
+        upld_path = String::from(&format!("uploads/{}/{}", user, upld_name));
+        println!("attempted upload path: {}", upld_path);
+
 
         let (name, date, time) = match get_data_info(data){
             Ok(x) => x,
@@ -886,8 +892,9 @@ pub fn sorting(how: u8, user: String) -> Result<Vec<FileNames>, String> {
             }
         }; 
 
+        /* 
         println!("entry ig to check: {:?}", entry);
-        let path = PathBuf::from(format!("{:?}", entry).replace(".txt", "").replace("\\\\", "/"));
+        let path = PathBuf::from(format!("{:?}", entry).replace(".txt", "").replace("\\\\", "/")); //there is a better way
 
         println!("path ig: {:?}", path);
 
@@ -905,15 +912,17 @@ pub fn sorting(how: u8, user: String) -> Result<Vec<FileNames>, String> {
                 return Err(String::from(""));
             } 
         };  
-        // names[i].ins_disk(String::from("")); //do this instead
-        // names[i].ins_real(name.to_string());
-        // names[i].ins_date(date.to_string());
-        // names[i].ins_time(time.to_string());
-        // names[i].ins_is_file(true);
+
+        */
+
+        let fold = String::from_utf8_lossy(&upld_path.as_bytes()[..upld_path.len() - (file_name.len() + 1)]);
         names.push(FileNames{
-            diskname: entry.path().display().to_string(),
-            uploads: upld_path.to_string(),
+            datapath: entry.path().display().to_string().replace("\\", "/"),
+            dataname: file_name.clone(),
+            uploadspath: upld_path.to_string(),
+            uploadsname: upld_name.to_string(),
             realname: name.to_string(),
+            folder: fold.to_string(),
             date: date.to_string(),
             time: time.to_string(),
             is_file: true,
@@ -974,7 +983,7 @@ pub fn sorting(how: u8, user: String) -> Result<Vec<FileNames>, String> {
     };
     
 
-    println!("\n\nsorted upload time: {:?}", sorted); //could do better???
+    // println!("\n\nsorted upload time: {:?}", sorted); //could do better???
 
     Ok(sorted)
 }
@@ -1317,9 +1326,12 @@ fn sort_fn(list: Vec<FileNames>) -> Vec<FileNames> {
 
     for i in 0..list.len() {
         lower_list.push(FileNames{
-            diskname: list[i].diskname.clone(),
-            uploads: list[i].uploads.clone(),
+            datapath: list[i].datapath.clone(),
+            dataname: list[i].dataname.clone(),
+            uploadspath: list[i].uploadspath.clone(),
+            uploadsname: list[i].uploadsname.clone(),
             realname: list[i].realname.to_lowercase(),
+            folder: list[i].folder.clone(),
             date: list[i].date.clone(),
             time: list[i].time.clone(),
             is_file: list[i].is_file.clone()
@@ -1411,21 +1423,21 @@ fn sort_fn_date(list: Vec<FileNames>) -> Vec<FileNames> {
     for i in 0..list.len() {
         let date = list[i].date.as_bytes();
 
-        println!("\nkey: {:?}", list[i]);
+        // println!("\nkey: {:?}", list[i]);
         // println!("len: {:?}", sorted.len());
         
         if sorted.len() == 0 {
             sorted.push(list[i].clone());
-            println!("key index first word byte: {:?}", date[0]);
-            println!("inserted first word");
+            // println!("key index first word byte: {:?}", date[0]);
+            // println!("inserted first word");
             continue;
         }
 
         breakpoint = false;
-        println!("checking ");
+        // println!("checking ");
 
         for j in (0..sorted.len()).rev(){
-            println!("checking again");
+            // println!("checking again");
             // println!("j: {}", j);
 
             // println!("How is {:?} compared to {:?}", key[0], sorted[j].as_bytes()[0]);
@@ -1436,12 +1448,12 @@ fn sort_fn_date(list: Vec<FileNames>) -> Vec<FileNames> {
             //     break;
             // }
 
-            if date[0] >= sorted[j].date.as_bytes()[0] {
+            if date >= sorted[j].date.as_bytes() {
 
                 for index in 0..date.len(){
                     let mut breakpoint2 = false;
 
-                    println!("date index byte: {:?}", date[index]);
+                    // println!("date index byte: {:?}", date[index]);
 
                     // debug this shit
                     //doesnt sort as it should and idk why
@@ -1452,8 +1464,8 @@ fn sort_fn_date(list: Vec<FileNames>) -> Vec<FileNames> {
 
                         for l in 0..list[i].time.len(){
                             if list[i].time.as_bytes()[l] < sorted[j].time.as_bytes()[l]{
-                                println!("{} is smaller than {}", list[i].time, sorted[j].time);
-                                println!("the digit that made the difference between {} and {} is {} < {}", list[i].time, sorted[j].time, list[i].time.as_bytes()[l], sorted[j].time.as_bytes()[l]);
+                                // println!("{} is smaller than {}", list[i].time, sorted[j].time);
+                                // println!("the digit that made the difference between {} and {} is {} < {}", list[i].time, sorted[j].time, list[i].time.as_bytes()[l], sorted[j].time.as_bytes()[l]);
                                 sorted.insert(j, list[i].clone());
                                 breakpoint2 = true;
                                 breakpoint = true;
@@ -1461,8 +1473,8 @@ fn sort_fn_date(list: Vec<FileNames>) -> Vec<FileNames> {
                             }
 
                             if list[i].time.as_bytes()[l] > sorted[j].time.as_bytes()[l]{
-                                println!("{} is bigger than {}", list[i].time, sorted[j].time);
-                                println!("the digit that made the difference between {} and {} is {} > {}", list[i].time, sorted[j].time, list[i].time.as_bytes()[l], sorted[j].time.as_bytes()[l]);
+                                // println!("{} is bigger than {}", list[i].time, sorted[j].time);
+                                // println!("the digit that made the difference between {} and {} is {} > {}", list[i].time, sorted[j].time, list[i].time.as_bytes()[l], sorted[j].time.as_bytes()[l]);
                                 sorted.insert(j + 1, list[i].clone());
                                 breakpoint2 = true;
                                 breakpoint = true;
@@ -1472,14 +1484,14 @@ fn sort_fn_date(list: Vec<FileNames>) -> Vec<FileNames> {
                     }
 
                     if date[index] < sorted[j].date.as_bytes()[index]{
-                        println!("\n\nIs the date smaller than the stored date");
+                        // println!("\n\nIs the date smaller than the stored date");
                         sorted.insert(j, list[i].clone());
                         breakpoint = true;
                         break;
                     }
 
                     if date[index] > sorted[j].date.as_bytes()[index]{
-                        println!("\n\nIs the date bigger than the stored date");
+                        // println!("\n\nIs the date bigger than the stored date");
                         sorted.insert(j + 1, list[i].clone());
                         breakpoint = true;
                         break;
@@ -1490,10 +1502,10 @@ fn sort_fn_date(list: Vec<FileNames>) -> Vec<FileNames> {
                     }
 
                 }
-            } else if j == 0 && date[0] < sorted[j].date.as_bytes()[0]{
-                println!("\n\nIs j = 0 and sorted bigger than the uploaded date, HUH?");
+            } else if j == 0 && date < sorted[j].date.as_bytes(){
+                // println!("\n\nIs j = 0 and sorted bigger than the uploaded date, HUH?");
                 sorted.insert(j, list[i].clone());
-                println!("key index byte: {:?}", list[i].date.as_bytes()[0]);
+                // println!("key index byte: {:?}", list[i].date.as_bytes()[0]);
                 break;
             } 
 
