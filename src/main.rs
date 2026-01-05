@@ -25,6 +25,10 @@ use colored::Colorize;
 
 use uuid::{Uuid};
 
+use serde::{Deserialize, Serialize};
+use serde_json;
+
+
 mod auth;
 mod file_operations;
 mod utils;
@@ -53,12 +57,15 @@ use security::*;
         check_Auth, sau diverse
 
     si log everything in the file, that can be logged ofc
-    so i can better see the workflow ig? but then there wil be a problem if i get 2 requests at the same time and both for different things but they get processed at the same time
-
-    -in SHOW_FOLDER nu ar fi mai bine sa verificam daca utilizatorul este autentificat prin a lua acel cookie in loc sa verificam daca e pe server trecut?
 
     -redesign the front end (pls)
 
+    -keep implementing sorting functions 
+    
+    -implement a sign out function
+    
+    67
+    -also, when opening options to also request the preview (from the server) or just make it so it's visible from the start
     
     good luck
 
@@ -373,35 +380,8 @@ fn get_method(mut stream: TcpStream, request: Request) {
 
     } else if request.header[..6] == *b"GET / " && connected == true{
         let status_line = "HTTP/1.1 200 OK\r\n";
-        {
-            let mut folder = match SHOW_FOLDER.lock() {
-                Ok(f) => f,
-                Err(e) => {
-                    match log(&format!("There was an error opening the folder mutex {}", e), 3) {
-                        Ok(x) => x,
-                        Err(e) =>{
-                            send_error_response(&mut stream, 400, &format!("{}", e));
-                            return;
-                        }
-                    }
-                    send_error_response(&mut stream, 400, "Failed to open the folder Variable so i cant see who is conected");
-                    return;
-                },
-            };
-            let user = match memmem::find(request.header, b"Cookie: Auth=\"user-").map(|p| p as usize){
-                Some(x) => x,
-                None => {
-                    send_error_response(&mut stream, 400, "I think you broke something in here");
-                    return;
-                },
-            };
-            let end = memmem::find(request.header, b"-token").map(|p| p as usize).unwrap();
-            let user = &request.header[user + "Cookie: Auth=\"user-".len() ..end];
-            *folder = String::from_utf8_lossy(&user[..]).to_string(); //wtffffffff
-        }
-        // println!("Done with the normal GET request my guy");
 
-        let site = web(request);
+        let site = web(&mut stream, request.clone());
         if !memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some() {
             send_error_response(&mut stream, 400, "There has been an error generating the webpage");
             return;
@@ -418,6 +398,7 @@ fn get_method(mut stream: TcpStream, request: Request) {
                 } 
             }
         }
+        
         if let Err(e) = stream.flush() {
             eprintln!("Error flushing: {}", e);
             match log(&format!("Error flushing: {}", e), 3){
@@ -427,141 +408,116 @@ fn get_method(mut stream: TcpStream, request: Request) {
                 } 
             }
         }
-
 
     } else if memmem::find(&request.header, b"/uploads/").is_some(){ //for previews
         //for images
         web_send_image(stream, request);
-    } else if request.header[..19] == *b"GET /open_folder../" { //for back traversal  
-        // println!("We got this chat");
-        let status_line = "HTTP/1.1 200 OK\r\n";
-
-        {
-            let mut folder = match SHOW_FOLDER.lock() {
-                Ok(f) => f,
-                Err(e) => {
-                    println!("failed to open the folder variable {}", e);
-                    send_error_response(&mut stream, 400, "Failed to open the folder Variable so i cant see who is conected");
-                    return;
-                },
-            };
-
-            let path = Path::new(&*folder);
-            let parent = match path.parent() {
-                Some(p) => p,
-                None => {
-                    send_error_response(&mut stream, 400, "No parent folder found");
-                    return;
-                }
-            };
-
-            // println!("parent = {:?}", parent.display().to_string());
-            *folder = parent.display().to_string();
-        }
-
-        let site = web(request);
-        if !memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some() {
-            send_error_response(&mut stream, 400, "There has been an error generating the webpage");
-            return;
-        }
-        let response = format!("{}Content-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, site);
-
-        // println!("should get a response?");
-        // println!("{}", response);
-        if let Err(e) = stream.write_all(response.as_bytes()) {
-            eprintln!("Write error: {}", e);
-            match log(&format!("Write error: {}", e), 3){
-                Ok(x) => x,
-                Err(e) => {
-                    send_error_response(&mut stream, 400, &e);   
-                } 
-            }
-        }
-        if let Err(e) = stream.flush() {
-            eprintln!("Error flushing: {}", e);
-            match log(&format!("Error flushing: {}", e), 3){
-                Ok(x) => x,
-                Err(e) => {
-                    send_error_response(&mut stream, 400, &e);   
-                } 
-            }
-        }
-
-        
-    } else if request.header[..17] == *b"GET /open_folder/"{
-
-        // println!("buffer = {}", String::from_utf8_lossy(&buffer[..]));
-        let status_line = "HTTP/1.1 200 OK\r\n"; 
-
-        let mut end = memmem::find_iter(&request.header[..], b" ").map(|p| p as usize);
-        let _ = end.next();
-        let inner = &request.header[b"GET /open_folder/".len()..end.next().unwrap()];
-        let inner = String::from_utf8_lossy(&inner[..]);
-        {    
-            let mut folder = match SHOW_FOLDER.lock() {
-                Ok(f) => f,
-                Err(e) => {
-                    println!("There was a problem opening the folder variable {}", e);
-                    send_error_response(&mut stream, 400, "Failed to open the folder Variable so i cant see who is conected");
-                    return;
-                },
-            };
-            if *folder != "" {
-                let url = format!("{}/{}", folder, inner);
-                *folder = url.to_string();
-            } else {
-                *folder = inner.to_string();
-            }
-
-            // println!("folder that im supposed to show= {}", *folder);
-        }
-
-        // println!("Done with the GET request my guy");
-    
-        let site = web(request);
-        if !memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some() {
-            send_error_response(&mut stream, 400, "There has been an error generating the webpage");
-            return;
-        }
-        let response = format!("{}Content-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, site);
-        
-        // println!("should get a response?");
-        // println!("{}", response);
-        if let Err(e) = stream.write_all(response.as_bytes()) {
-            eprintln!("Write error: {}", e);
-            match log(&format!("Write error: {}", e), 3){
-                Ok(x) => x,
-                Err(e) => {
-                    send_error_response(&mut stream, 400, &e);   
-                } 
-            }
-        }
-        if let Err(e) = stream.flush() {
-            eprintln!("Error flushing: {}", e);
-            match log(&format!("Error flushing: {}", e), 3){
-                Ok(x) => x,
-                Err(e) => {
-                    send_error_response(&mut stream, 400, &e);   
-                } 
-            }
-        }
     }   
 }
 
-fn post_method(stream: TcpStream, buffer: Request) {
+fn post_method(mut stream: TcpStream, buffer: Request) {
     if let Some(action) = memmem::find(&buffer.body.clone().unwrap()[..], b"**action=").map(|p| p as usize) {
         post_action(stream, buffer, action);
     } else if let Some(_) = memmem::find(&buffer.body.clone().unwrap()[..], b"**account=").map(|p| p as usize){
         auth_user(stream, buffer);
     } else if let Some(_) = memmem::find(&buffer.body.clone().unwrap()[..], b"**password=").map(|p| p as usize) {
         auth_pass(stream, buffer);
+    } else if let Some(_) = memmem::find(&buffer.header[..], b"/files_fetch").map(|p| p as usize) {
+        give_files(stream, buffer);
+    } else if buffer.header[..18] == *b"POST /open_folder.." { //for back traversal  x
+
+        let user = memmem::find(&buffer.header, b" HTTP/1.1").map(|p| p as usize).unwrap();
+        let mut user = String::from_utf8_lossy(&buffer.header[18..user]);
+
+        if user == "" {
+            user = String::from("/").into(); //idk why it works, but it works
+        }
+        //work on this so it returns the parent 
+
+        let status_line = "HTTP/1.1 200 OK\r\n";
+
+        println!("did we get here??");
+
+        let site = web(&mut stream, buffer);
+        if !memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some() {
+            send_error_response(&mut stream, 400, "There has been an error generating the webpage");
+            return;
+        }
+        let response = format!("{}Set-Cookie: Folder=\"folder-{}-token\"; Path=/; SameSite=Strict; Max-Age=3600\r\nLocation: /\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, user, site);
+
+        // println!("should get a response?");
+        // println!("{}", response);
+        if let Err(e) = stream.write_all(response.as_bytes()) {
+            eprintln!("Write error: {}", e);
+            match log(&format!("Write error: {}", e), 3){
+                Ok(x) => x,
+                Err(e) => {
+                    send_error_response(&mut stream, 400, &e);   
+                } 
+            }
+        }
+        if let Err(e) = stream.flush() {
+            eprintln!("Error flushing: {}", e);
+            match log(&format!("Error flushing: {}", e), 3){
+                Ok(x) => x,
+                Err(e) => {
+                    send_error_response(&mut stream, 400, &e);   
+                } 
+            }
+        }
+
+        
+    } else if buffer.header[..17] == *b"POST /open_folder/"{
+
+        // println!("buffer = {}", String::from_utf8_lossy(&buffer[..]));
+        let status_line = "HTTP/1.1 200 OK\r\n"; 
+
+        let mut end = memmem::find_iter(&buffer.header[..], b" ").map(|p| p as usize);
+        let _ = end.next();
+        let inner = &buffer.header[b"GET /open_folder/".len()..end.next().unwrap()];
+        let inner = String::from_utf8_lossy(&inner[..]);
+
+        let mut user = checkFolder(&mut stream, buffer.clone());
+        if user != "" {
+                user =  format!("{}/{}", user, inner)
+            }
+        let site = web(&mut stream, buffer);
+        if !memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some() {
+            send_error_response(&mut stream, 400, "There has been an error generating the webpage");
+            return;
+        }
+        let response = format!("{}Set-Cookie: Folder=\"folder-{}-token\"; Path=/; SameSite=Strict; Max-Age=3600\r\nLocation: /\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, user, site);
+        
+        // println!("should get a response?");
+        // println!("{}", response);
+        if let Err(e) = stream.write_all(response.as_bytes()) {
+            eprintln!("Write error: {}", e);
+            match log(&format!("Write error: {}", e), 3){
+                Ok(x) => x,
+                Err(e) => {
+                    send_error_response(&mut stream, 400, &e);   
+                } 
+            }
+        }
+        if let Err(e) = stream.flush() {
+            eprintln!("Error flushing: {}", e);
+            match log(&format!("Error flushing: {}", e), 3){
+                Ok(x) => x,
+                Err(e) => {
+                    send_error_response(&mut stream, 400, &e);   
+                } 
+            }
+        }
     } else {
         upload_file(stream, buffer);
     }
 }
 
 fn post_action(mut stream: TcpStream, buffer: Request, action: usize) {
-        let data = &buffer.body.clone().unwrap()[action + "action=".len()..];
+
+        let status_line = "HTTP/1.1 200 OK\r\n";
+
+        let data = &buffer.body.clone().unwrap()[action + "**action=".len()..];
         let mut end = memmem::find_iter(data, b"&").map(|p| p as usize);
         let end1 = match end.next(){
             Some(x) => x,
@@ -604,6 +560,7 @@ fn post_action(mut stream: TcpStream, buffer: Request, action: usize) {
             send_error_response(&mut stream, 400, "Did you actually thought you can do this? 2");
             return;    
         }
+        println!("action = {}", String::from_utf8_lossy(&action[..]));
 
         if action[..] == *b"DELETE" {
             // println!("Deleted something");
@@ -631,7 +588,7 @@ fn post_action(mut stream: TcpStream, buffer: Request, action: usize) {
                     send_error_response(&mut stream, 400, &e);   
                 } 
             }
-            download(stream, filename);
+            download(stream, buffer, filename);
         } else if action[..] == *b"RENAME_FOLDER" {
 
             //idk why this part is here but i'm gonna move it
@@ -681,7 +638,100 @@ fn post_action(mut stream: TcpStream, buffer: Request, action: usize) {
                     send_error_response(&mut stream, 400, &e);   
                 } 
             }
-            download_folder(stream, filename);
+            download_folder(stream, buffer, filename);
+        } else if action[..] == *b"OPEN_FOLDER" {
+            let folder = checkFolder(&mut stream, buffer.clone());
+            let path = format!("{}/{}", folder, filename);
+            // println!("path: {}", path);
+
+            let site = web(&mut stream, buffer.clone());
+            if !memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some() {
+                send_error_response(&mut stream, 400, "There has been an error generating the webpage");
+                return;
+            }
+            let response = format!("{}Set-Cookie: Folder=\"folder-{}-token\"; Path=/; SameSite=Strict; Max-Age=3600\r\nLocation: /\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, path, site);
+
+            if let Err(e) = stream.write_all(response.as_bytes()) {
+                eprintln!("Write error: {}", e);
+                match log(&format!("Write error: {}", e), 3){
+                    Ok(x) => x,
+                    Err(e) => {
+                        send_error_response(&mut stream, 400, &e);   
+                    } 
+                }
+            }
+            if let Err(e) = stream.flush() {
+                eprintln!("Error flushing: {}", e);
+                match log(&format!("Error flushing: {}", e), 3){
+                    Ok(x) => x,
+                    Err(e) => {
+                        send_error_response(&mut stream, 400, &e);   
+                    } 
+                }
+            }
+
+        } else if action[..] == *b"**open_folder.." {
+            let folder = checkFolder(&mut stream, buffer.clone());
+            let parent = memmem::rfind(&folder.as_bytes()[..], b"/").map(|p| p as usize).unwrap();
+            let mut parent = String::from_utf8_lossy(&folder.as_bytes()[..parent]);
+
+            println!("parent: {}", parent);
+            if parent == "/" {
+                parent = String::from("").into()    ;
+            }
+
+            let site = web(&mut stream, buffer.clone());
+            if !memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some() {
+                send_error_response(&mut stream, 400, "There has been an error generating the webpage");
+                return;
+            }
+            let response = format!("{}Set-Cookie: Folder=\"folder-{}-token\"; Path=/; SameSite=Strict; Max-Age=3600\r\nLocation: /\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, parent, site);
+
+            if let Err(e) = stream.write_all(response.as_bytes()) {
+                eprintln!("Write error: {}", e);
+                match log(&format!("Write error: {}", e), 3){
+                    Ok(x) => x,
+                    Err(e) => {
+                        send_error_response(&mut stream, 400, &e);   
+                    } 
+                }
+            }
+            if let Err(e) = stream.flush() {
+                eprintln!("Error flushing: {}", e);
+                match log(&format!("Error flushing: {}", e), 3){
+                    Ok(x) => x,
+                    Err(e) => {
+                        send_error_response(&mut stream, 400, &e);   
+                    } 
+                }
+            }
+
+        } else if action[..] == *b"**home"{
+            let site = web(&mut stream, buffer.clone());
+            if !memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some() {
+                send_error_response(&mut stream, 400, "There has been an error generating the webpage");
+                return;
+            }
+            let response = format!("{}Set-Cookie: Folder=\"folder--token\"; Path=/; SameSite=Strict; Max-Age=3600\r\nLocation: /\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, site);
+
+            if let Err(e) = stream.write_all(response.as_bytes()) {
+                eprintln!("Write error: {}", e);
+                match log(&format!("Write error: {}", e), 3){
+                    Ok(x) => x,
+                    Err(e) => {
+                        send_error_response(&mut stream, 400, &e);   
+                    } 
+                }
+            }
+            if let Err(e) = stream.flush() {
+                eprintln!("Error flushing: {}", e);
+                match log(&format!("Error flushing: {}", e), 3){
+                    Ok(x) => x,
+                    Err(e) => {
+                        send_error_response(&mut stream, 400, &e);   
+                    } 
+                }
+            }
         } else {
             match log("The user attempted to", 2){
                 Ok(x) => x,

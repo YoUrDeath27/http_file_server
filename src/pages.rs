@@ -1,48 +1,6 @@
     use super::*;
 
-    pub fn web(buffer: Request) -> String {
-        let folder = match SHOW_FOLDER.lock(){
-                Ok(x) => x,
-                Err(e) => {
-                    println!("cant identify the user from the folder mutex\n{:?}", e);
-                    match log(&format!("Error identifying the user from Mutex : {}", e), 3){
-                        Ok(x) => x,
-                        Err(_e) => {
-                            // send_error_response(&mut stream, 400, &e);   
-                            return String::from("");
-                        } 
-                    }
-                    // send_error_response(&mut stream, 500, "There is a problem that we dont know how u got here");
-                    return String::from("");
-                }
-            };
-
-        let sorting_option = 1; //e.g. alphabetical, uploaded time, type, size 
-        let mut sorted = sorting(sorting_option, folder.to_string());
-        // match sorting_option {
-        //     0 => alfabetical_order(folder.to_string()),
-        //     1 => upload_order(folder.to_string()),
-        //     _ => alfabetical_order(folder.to_string()),
-        // };
-
-        let sorted = match sorted {
-            Ok(x) => x,
-            Err(e) => {
-                println!("There was a problem sorting the files: {}", e);
-                match log(&format!("There was a problem sorting the files: {}", e), 3){
-                    Ok(x) => x,
-                    Err(_e) => {
-                        // send_error_response(&mut stream, 400, &e);   
-                        return String::from("");
-                    } 
-                }
-                // send_error_response(&mut stream, 500, "There is a problem that we dont know how u got here");
-                return String::from("");
-            }
-        };
-
-        println!("\nsorted: {:?}", sorted); //could do better???
-        
+    pub fn web(stream: &mut TcpStream, buffer: Request) -> String {
 
         let mut html = String::from(
             "    
@@ -106,6 +64,27 @@
                 color: blue;
                 cursor: pointer;
             }
+            .loader-container {
+                text-align: center;
+                padding: 20px;
+            }
+
+            .spinner {
+                border: 8px solid rgba(0, 0, 0, 0.1);
+                width: 72px;
+                height: 72px;
+                border-radius: 50%;
+                border-left-color: #09f;
+                animation: spin 1s ease infinite;
+                display: inline-block;
+            }
+
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                20% {transform: rotate(50deg); }
+                60% {transform: rotate(200deg); }
+                100% { transform: rotate(360deg); }
+            }
 
         </style>
 
@@ -118,219 +97,72 @@
             <button type=\"submit\">Upload</button>
         </form> 
 
-        <form action\"/\" method=\"POST\">
+        <form action=\"/\" method=\"POST\">
             <input type=\"hidden\" name=\"**action\" value=\"ADD_FOLDER\">
             <input type=\"text\" name=\"filename\" required>
             <button type=\"submit\">Add Folder </button>
-        </form> "
+        </form> 
+        <span id='breadcrumb'>
+        </span>
+        "
         );
-        
-        if let Some(user) =  memmem::find(&buffer.header[..], b"Cookie: Auth=\"user-").map(|p| p as usize) {
-            
-            let user_folder = &*folder.as_bytes();
-            let user = &buffer.header[user + "Cookie: Auth=\"user-".len() ..];
-            let end = match memmem::find(user, b"-token").map(|p| p as usize){
-                Some(x) => x,
-                None => {
-                    println!("Unnable to find the end of Auth token");
-                    match log("Error finding the user's Auth token", 2){
-                        Ok(x) => x,
-                        Err(_e) => {
-                            // send_error_response(&mut stream, 400, &e); 
-                            return String::from("");  
-                        } 
-                    }
-                    // send_error_response(&mut stream, 404, "We were unnable to locate your auth key<br> u tampered with it right?");
-                    return String::from("");
-                }
-            };
-            println!("breadcrumb: {}", String::from_utf8_lossy(&user[..]));
-            let user = &user[..end];
+        /*
+        //need to make the breadcrum on js too...
+        let user = checkAuth(stream, buffer.clone());
+        let folder = checkFolder(stream, buffer.clone());
+        if user != "" && memmem::find(&folder.as_bytes()[..], b"/").map(|p| p as usize).is_some() {
 
-            let folder_b = &user_folder[user.len()..];
-            let user_folder = String::from_utf8_lossy(&folder_b[..]);
+            println!("breadcrumbing... ");
+            let f = memmem::find(&folder.as_bytes()[..], b"/").map(|p| p as usize).unwrap(); //augu/a
+
+            let folder_b = &folder.as_bytes()[f..];
+            let user_folder = String::from_utf8_lossy(&folder_b[..]); // /a
             // println!("folder that im currently in= {}", user_folder);
             println!("breadcrumb2: {}", user_folder);
 
-            if &user_folder != ""  {         //911 joke incoming //it was on line 911 at the time of writing that comment
-                let breadcrumb = memmem::rfind(&folder_b[..], b"/").map(|p| p as usize).unwrap();
+            if &user_folder != "/"  {         //911 joke incoming //it was on line 911 at the time of writing that comment
+                let breadcrumb = memmem::rfind(&folder_b[..], b"/").map(|p| p as usize).unwrap(); // *empty*
                 let parent_folder = &folder_b[..breadcrumb];
 
                 println!("breadcrumb3: {}", String::from_utf8_lossy(&parent_folder[..]));
 
                 html.push_str(&*format!(
-                    "
+                    "  
                     Location: {}
                     <br>
-                    <button onclick=\"window.location.href='/'\">Go back to home</button>
+                    <button onclick=\"window.location.href='/open_folder..{}'\">Go back to home</button>
                     ",
-                    String::from_utf8_lossy(&user_folder.as_bytes()[1..])
+                    String::from_utf8_lossy(&user_folder.as_bytes()[1..]),
+                    &user[..f]
+
                 ));
                 if !parent_folder.is_empty() {
                     html.push_str(&*format!(
                         "<br>
                         <button onclick=\"window.location.href='/open_folder..{}'\">Go back 1 layer {:?}</button>
+                        
                         ",
-                        String::from_utf8_lossy(parent_folder),
-                        String::from_utf8_lossy(parent_folder)
+                        format!("{}/{}", &user[..f], String::from_utf8_lossy(parent_folder)),
+                        format!("{}/{}", &user[..f], String::from_utf8_lossy(parent_folder))
                     ));
                 }
             }
-        } 
+        } */
         
-        html.push_str("
+        html.push_str(r#"
+            <h3> File ordering </h3>
+            <select id="ordering" onChange="changed(this)">
+                <option value="0">A-Z</option>
+                <option value="1">New to Old</option>
+                <option value="2">Big to Small</option>
+                <option value="3">File Type</option>
+                <option value="4">Z-A</option>
+                <option value="5">Old to New</option>
+                <option value="6">small to Big</option>
+            </select>
             <h2> Saved Files:</h2>
-            <ul>
-        ");
-
-        let file_folder = &folder;
-        for i in 0..sorted.len() {  
-            if !sorted[i].is_file {
-            
-                html.push_str(&*format!(
-                    "<li>
-                        <h3>
-                            {}
-                        </h3>
-                        <br>
-                        <button class=\"options_folder\" id=\"{}\"  onclick=\"open_folder_options(this)\"> 
-                            <span> &#8942; </span>
-                        </button>
-                        <div id=\"options\" style=\"display: none; z-index: 10\">
-                            <div style=\"display: block;  margin:0 10px 0 0;\">
-                                <form action=\"/\" method =\"POST\">
-                                    <input type=\"hidden\" name=\"**action\" value=\"DELETE\">
-                                    <input type=\"hidden\" name=\"folder\" value=\"{}\">
-                                    <input type=\"hidden\" name=\"filename\" value=\"{}\">
-                                    <button type=\"submit\">Delete</button>
-                                </form>
-                                <form action=\"/\" method =\"POST\">
-                                    <input type=\"hidden\" name=\"**action\" value=\"RENAME_FOLDER\">
-                                    <input type=\"hidden\" name=\"filename\" value=\"{}\">
-                                    <input type=\"text\" name=\"newFile\">
-                                    <button type=\"submit\">Rename</button>
-                                </form>
-                                <form action=\"/\" method=\"POST\">
-                                    <input type=\"hidden\" name=\"**action\" value=\"DOWNLOAD_FOLDER\">
-                                    <input type=\"hidden\" name=\"filename\" value=\"{}\">
-                                    <button type=\"submit\">Download as ZIP</button>
-                                </form>
-                            </div>
-                            <button onclick=\"window.location.href='/open_folder/{}'\">Open folder</button>
-                        </div>
-                    </li>",
-                    sorted[i].realname,
-                    i,
-                    sorted[i].folder, //folder aka augu/if/there/is/smth/else  without filename
-                    sorted[i].datapath,
-                    sorted[i].folder, //same here
-                    sorted[i].datapath,
-                    sorted[i].realname //the name of the folder
-                ));
-            } else {
-                // println!("file: {:?}", file_names[i]);
-                // println!("filejs: {}", files[i].display());
-
-                println!("File: {}", folder);
-
-                html.push_str(&*format!(
-                    "<li> 
-                        <h3>
-                            {}
-                        </h3>
-                        <br>
-                        <button class=\"options_file\" onclick=\"open_file_options(this)\" id=\"{}\"> 
-                            <span> &#8942; </span>
-                        </button>
-                        <div id=\"options\" style=\"display:none; z-index: 10\">
-                            <div style=\"margin:0 10px 0 0;\">
-                                <form action=\"/\" method =\"POST\">
-                                    <input type=\"hidden\" name=\"**action\" value=\"DELETE\">
-                                    <input type=\"hidden\" name=\"filename\" value=\"{}\">
-                                    <button type=\"submit\"> Delete </button>
-                                </form>
-                                <form action=\"/\" method =\"POST\">
-                                    <input type=\"hidden\" name=\"**action\" value=\"DOWNLOAD\">
-                                    <input type=\"hidden\" name=\"filename\" value=\"{}\">
-                                    <button type=\"submit\"> DOWNLOAD </button>
-                                </form>
-                            </div>
-                        ",
-                    sorted[i].realname, 
-                    i, 
-                    sorted[i].uploadsname, 
-                    sorted[i].uploadsname
-                ));
-                let mut content_type_file = match fs::File::open(sorted[i].datapath.clone()){
-                    Ok(x) => x,
-                    Err(e) => {
-                        println!("The user's uploads folder cannot be read\n{:?}", e);
-                        match log(&format!("Error reading the uploads folder: {}", e), 3){
-                            Ok(x) => x,
-                            Err(_e) => {
-                                // send_error_response(&mut stream, 400, &e);   
-                                return String::from("");
-                            } 
-                        }
-                        return String::from("");
-                    }
-                };
-
-                let mut content_type = String::new();
-                match content_type_file.read_to_string(&mut content_type){
-                    Ok(x) => x, 
-                    Err(e) => {
-                        println!("error: {}", e);
-                        match log(&format!("{}", e), 3){
-                            Ok(x) => x,
-                            Err(e) => {
-                                println!("{}", e);
-                                return String::from("");
-                            }
-                        }
-                        return String::from("");
-                    }
-                };
-                let end = match memmem::find(&content_type.as_bytes()[..], b";").map(|p| p as usize) {
-                    Some(x) => x,
-                    None => {
-                        println!("SIgma sigma on the wall, why did u mess with the files again?");
-                        match log("There is problem reading the content type", 3){
-                            Ok(x) => x,
-                            Err(_e) => {
-                                // send_error_response(&mut stream, 400, &e);  
-                                return String::from("");
-                            } 
-                        }
-                        return String::from("");
-                    }
-                };
-                let c_type = String::from_utf8_lossy(&content_type.as_bytes()["Content-Type:".len()..end]);
-                println!("FIle data type is: {}", c_type);
-
-                if IMAGE_TYPES.contains(&&*c_type) {
-                    html.push_str(&format!("
-                        <img src={} alt =\"IDFK\" style=\"max-width: 300px; \" >",
-                        sorted[i].uploadspath
-                    ));
-                    // println!("image showing");
-                } //then check for videos, text and all the other
-                else if VIDEO_TYPES.contains(&&*c_type) { //why tf is this not working?
-                    html.push_str(&format!("
-                        <video width=\"300\" height =\"240\" controls>
-                            <source src=\"{}\" type=\"{}\">
-                            Your browser doesnt support my video :'(
-                        </video>
-                    ",  sorted[i].uploadspath,
-                        c_type
-                    ));
-                    // println!("Video showing");
-                }
-                html.push_str("</div>
-                                </li>\n
-                            ");
-            }
-        }
+            <ul id="files-window">
+        "#);
 
         html.push_str(
             "
@@ -361,7 +193,251 @@
                 } else {
                     button.parentElement.children[3].style.display = 'none';
                 }
-            }
+            }"
+        );
+
+        html.push_str(r#"
+            const filesWindow = document.getElementById('files-window');
+            const bread = document.getElementById('breadcrumb');
+            const option = document.getElementById('ordering');
+
+            document.addEventListener('DOMContentLoaded', function() {{
+                console.log(option);
+                console.log("cookieee " + document.cookie);
+                breadcrumbs();
+                getFiles("0");
+            }})
+
+            function changed(element) {{
+                console.log(element);
+                console.log(element.value);
+                getFiles(element.value);
+            
+            }} 
+
+            function breadcrumbs() {{
+                let str = document.cookie;
+                let first = str.indexOf("Folder=\"folder-");
+                let end = str.indexOf("-token");
+
+                console.log(str);
+                console.log("did it return???");
+                let folder = str.slice(first + 15, end);
+                console.log("folder" + folder);
+
+
+                
+                if (folder !== "") {{
+                    
+                    let parent = [...folder.matchAll(/\//g)];
+                    let last = parent.at(-1);
+                    console.log("last slash at index:", last);
+
+                        bread.innerHTML = `
+                            Location: ${folder}
+                            <br>
+                            <form action="/" method=\"POST\">
+                                <input type="hidden" name="**action" value="**home">
+                            <input type="hidden" name="filename" value="/">
+                            <button type="submit">Go back to home</button>
+                        </form> 
+                    `
+                    if (last.index !== 0) {{
+
+                    bread.innerHTML = `
+                        Location: ${folder}
+                        <br>
+                        
+                        <form actionn="/" method=\"POST\">
+                            <input type=\"hidden\" name="**action" value="**open_folder..">
+                            <input type=\"hidden\" name="filename" value="/">
+                            <button type=\"submit\">Go back 1 layer back</button>
+                        </form> 
+                        <form action="/" method=\"POST\">
+                            <input type=\"hidden\" name=\"**action" value=\"**home">
+                            <input type=\"hidden\" name="filename" value="/">
+                            <button type=\"submit\">Go Home</button>
+                        </form> 
+                        
+                    `
+                    }}
+                }}  
+            }}  
+
+            async function getFiles(value) {{
+
+            filesWindow.innerHTML = `    
+                <div class="loader-container">
+                    <p>⌛ Loading your files, please wait...</p>
+                    <div class="spinner"></div> 
+                </div>
+            `;
+
+                const params = {
+                    order: value,
+                };
+
+                const options = {
+                    method: 'POST',
+                    body: JSON.stringify( params ),
+                };  
+
+                console.log(options);
+                try {{
+                    const response = await fetch('/files_fetch', options);
+
+                    console.log(response);
+                    let data = await response.json();
+                    console.log("data??");
+                    console.log(data);
+
+                    console.log(data);
+                    setTimeout(() => {{ //simulate slow server
+                        insertFiles(data);
+                    }}, 2000);
+
+                }} catch (error) {{
+                    console.error('Error loading the files:', error);
+                    filesWindow.innerHTML = `<p style="color: red;">❌ Failed to load files: ${error.message}</p>`;
+                }}
+                
+            }}
+
+            function insertFiles(list) {{
+                if (list.length == 0) {{
+                    filesWindow.innerHTML = `<h2> Let's start uploading some files :3 </h2>`
+                }} else {{
+                    filesWindow.innerHTML = list.map(file=> {{
+                        console.log(file);
+                        if (file.is_file == true) {{
+                            if (file.file_type == "image") {{
+                                return `
+                                <li>
+                                    <h3>
+                                        ${file.realname}
+                                    </h3>
+                                    <br>
+                                    <button class=\"options_file\" id=\"${file.id}\" onclick=\"open_file_options(this)\"> 
+                                        <span> &#8942; </span>
+                                    </button>
+                                    <div id=\"options\" style=\"display:none; z-index: 10\">
+                                        <div style=\"margin:0 10px 0 0;\">
+                                            <form action=\"/\" method =\"POST\">
+                                                <input type=\"hidden\" name=\"**action\" value=\"DELETE\">
+                                                <input type=\"hidden\" name=\"filename\" value=\"${file.uploadsname}\">
+                                                <button type=\"submit\"> Delete </button>
+                                            </form>
+                                            <form action=\"/\" method =\"POST\">
+                                                <input type=\"hidden\" name=\"**action\" value=\"DOWNLOAD\">
+                                                <input type=\"hidden\" name=\"filename\" value=\"${file.uploadsname}\">
+                                                <button type=\"submit\"> DOWNLOAD </button>
+                                            </form>
+                                        </div>
+                                        <img src=${file.uploadspath} alt =\"IDFK\" style=\"max-width: 300px;\" >
+                                    </div>
+                                </li>`
+                            }} else if (file.file_type == "video") {{
+                                return ` 
+                                <li>
+                                    <h3>
+                                        ${file.realname}
+                                    </h3>
+                                    <br>
+                                    <button class=\"options_file\" id=\"${file.id}\" onclick=\"open_file_options(this)\"> 
+                                        <span> &#8942; </span>
+                                    </button>
+                                    <div id=\"options\" style=\"display:none; z-index: 10\">
+                                        <div style=\"margin:0 10px 0 0;\">
+                                            <form action=\"/\" method =\"POST\">
+                                                <input type=\"hidden\" name=\"**action\" value=\"DELETE\">
+                                                <input type=\"hidden\" name=\"filename\" value=\"${file.uploadsname}\">
+                                                <button type=\"submit\"> Delete </button>
+                                            </form>
+                                            <form action=\"/\" method =\"POST\">
+                                                <input type=\"hidden\" name=\"**action\" value=\"DOWNLOAD\">
+                                                <input type=\"hidden\" name=\"filename\" value=\"${file.uploadsname}\">
+                                                <button type=\"submit\"> DOWNLOAD </button>
+                                            </form>
+                                        </div>
+                                        <video width=\"300\" height =\"240\" controls>
+                                            <source src=\"${file.uploadspath}\" type=\"${file.f_type}\">
+                                            Your browser doesnt support my video :'(
+                                        </video>
+                                    </div>
+                                </li>
+                                `
+                            }} else if (file.file_type == "text") {{
+                                return ` 
+                                <li>
+                                    <h3>
+                                        ${file.realname}
+                                    </h3>
+                                    <br>
+                                    <button class=\"options_file\" id=\"${file.id}\" onclick=\"open_file_options(this)\"> 
+                                        <span> &#8942; </span>
+                                    </button>
+                                    <div id=\"options\" style=\"display:none; z-index: 10\">
+                                        <div style=\"margin:0 10px 0 0;\">
+                                            <form action=\"/\" method =\"POST\">
+                                                <input type=\"hidden\" name=\"**action\" value=\"DELETE\">
+                                                <input type=\"hidden\" name=\"filename\" value=\"${file.uploadsname}\">
+                                                <button type=\"submit\"> Delete </button>
+                                            </form>
+                                            <form action=\"/\" method =\"POST\">
+                                                <input type=\"hidden\" name=\"**action\" value=\"DOWNLOAD\">
+                                                <input type=\"hidden\" name=\"filename\" value=\"${file.uploadsname}\">
+                                                <button type=\"submit\"> DOWNLOAD </button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </li>
+                                `
+                            }}
+                        }} else {{
+                            return `
+                            <li>
+                                <h3>
+                                    ${file.realname}
+                                </h3>
+                                <br>
+                                <button class="options_folder" id="${file.id}" onclick="open_folder_options(this)"> 
+                                    <span> &#8942; </span>
+                                </button>
+                                <div id="options" style="display: none; z-index: 10">
+                                    <div style="display: block;  margin:0 10px 0 0;">
+                                        <form action="/" method ="POST">
+                                            <input type= "hidden" name= "**action" value= "DELETE">
+                                            <input type= "hidden" name= "folder" value= "${file.folder}">
+                                            <input type= "hidden" name= "filename" value= "${file.datapath}">
+                                            <button type= "submit">Delete</button>
+                                        </form>
+                                        <form action="/" method ="POST">
+                                            <input type= "hidden" name= "**action" value= "RENAME_FOLDER">
+                                            <input type= "hidden" name= "filename" value= "${file.folder}">
+                                            <input type= "text\" name= "newFile">
+                                            <button type= "submit">Rename</button>
+                                        </form>
+                                        <form action="/" method="POST">
+                                            <input type= "hidden" name= "**action" value= "DOWNLOAD_FOLDER">
+                                            <input type= "hidden" name= "filename" value= "${file.datapath}">
+                                            <button type= "submit">Download as ZIP</button>
+                                        </form>
+                                    </div>
+                                    <form actionn="/" method= "POST">
+                                        <input type= "hidden" name= "**action" value= "OPEN_FOLDER">
+                                        <input type= "hidden" name= "filename" value= "${file.realname}">
+                                        <button type= "submit">Open Folder</button>
+                                    </form> 
+                                </div>
+                            </li>
+                            `
+                        }}
+                    }}).join('');
+                }}
+            }}
+        "#);
+
+        html.push_str("
             </script>
             </html>"
             );
@@ -477,7 +553,7 @@
 
                 <h4> Password: </h4>
             <form action=\"/\" method=\"POST\">
-                <input type=\"hidden\" name=\"user\" value=\"{}\">
+                <input type=\"hidden\" name=\"**user\" value=\"{}\">
                 <input type=\"text\" name=\"**password\">
                 <button type=\"submit\"> Login/Signup </button>
             </form>

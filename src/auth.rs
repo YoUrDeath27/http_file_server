@@ -2,7 +2,7 @@ use super::*;
 use bcrypt::{DEFAULT_COST, hash, verify};
 
 pub fn auth_user(mut stream: TcpStream, buffer: Request) {
-    let name =  match memmem::find(&buffer.body.clone().unwrap()[..], b"account=").map(|p| p as usize){
+    let name =  match memmem::find(&buffer.body.clone().unwrap()[..], b"**account=").map(|p| p as usize){
         Some(x) => x,
         None => {
             match log("the user tried to connect while it did not met the requirements to log in", 2){
@@ -16,7 +16,7 @@ pub fn auth_user(mut stream: TcpStream, buffer: Request) {
             return;
         }
     };
-    let name = &buffer.body.clone().unwrap()[name + "account=".len()..];
+    let name = &buffer.body.clone().unwrap()[name + "**account=".len()..];
     let name = String::from_utf8_lossy(&name[..]);
 
     let status_line = "HTTP/1.1 200 OK\r\n";
@@ -43,7 +43,7 @@ pub fn auth_user(mut stream: TcpStream, buffer: Request) {
 }
 
 pub fn auth_pass(mut stream: TcpStream, buffer: Request) {
-    let user = match memmem::find(&buffer.body.clone().unwrap()[..], b"user=").map(|p| p as usize){
+    let user = match memmem::find(&buffer.body.clone().unwrap()[..], b"**user=").map(|p| p as usize){
         Some(x) => x,
         None => {
             match log("The user tried to log in while not meeting the requirements", 2){
@@ -57,7 +57,7 @@ pub fn auth_pass(mut stream: TcpStream, buffer: Request) {
             return;
         }
     };
-    let user = &buffer.body.clone().unwrap()[user + "user=".len()..];
+    let user = &buffer.body.clone().unwrap()[user + "**user=".len()..];
     let end = match memmem::find(&user[..], b"&").map(|p| p as usize){
         Some(x) => x,
         None => {
@@ -72,11 +72,9 @@ pub fn auth_pass(mut stream: TcpStream, buffer: Request) {
             return;
         }
     };
-    let user = &user[..end];
+    let user = String::from_utf8_lossy(&user[..end]);
 
-    let user = String::from_utf8_lossy(&user[..]);
-
-    let pass = match memmem::find(&buffer.body.clone().unwrap()[..], b"password=").map(|p| p as usize){
+    let pass = match memmem::find(&buffer.body.clone().unwrap()[..], b"**password=").map(|p| p as usize){
         Some(x) => x,
         None => {
             match log("The request probably got corrupted", 2){
@@ -90,7 +88,7 @@ pub fn auth_pass(mut stream: TcpStream, buffer: Request) {
             return;
         }
     };
-    let pass = &buffer.body.clone().unwrap()[pass + "password=".len()..];
+    let pass = &buffer.body.clone().unwrap()[pass + "**password=".len()..];
     let pass = String::from_utf8_lossy(&pass[..]);
 
     let mut text = Vec::new();
@@ -237,7 +235,6 @@ pub fn auth_pass(mut stream: TcpStream, buffer: Request) {
                         } 
                     }
                 } else {
-
                     println!("Write permission accepted? for {:?}", metadata);
                 }
 
@@ -329,27 +326,13 @@ pub fn auth_pass(mut stream: TcpStream, buffer: Request) {
     //if the user and pass match show the corresponding 
 
 
-    {
-        let mut folder = match SHOW_FOLDER.lock(){
-            Ok(x) => x,
-            Err(e) => {
-                println!("cant identify the user from the folder mutex\n{:?}", e);
-                match log(&format!("Error identifying the user from Mutex: {}", e), 3){
-                    Ok(x) => x,
-                    Err(e) => {
-                        send_error_response(&mut stream, 400, &e);   
-                    } 
-                }
-                send_error_response(&mut stream, 500, "There is a problem that we dont know how u got here");
-                return;
-            }
-        };
-        *folder = (&user).to_string(); 
+    {  
+        let path = format!("{}", user);
         // println!("folder ={}", *folder);
         // fs::read_dir(format!("uploads/{}", *folder)).unwrap();
-        match fs::read_dir(format!("uploads/{}", *folder)) {
+        match fs::read_dir(format!("uploads/{}", path)) {
             Err(_) => {
-                match fs::create_dir_all(format!("uploads/{}", folder)) {
+                match fs::create_dir_all(format!("uploads/{}", path)) {
                     Ok(x) => x,
                     Err(e) => {
                         match log(&format!("{}", e), 3){
@@ -364,7 +347,7 @@ pub fn auth_pass(mut stream: TcpStream, buffer: Request) {
                         return;    
                     }
                 };
-                match fs::create_dir_all(format!("data/{}", folder)) {
+                match fs::create_dir_all(format!("data/{}", path)) {
                     Ok(x) => x,
                     Err(e) => {
                         match log(&format!("{}", e), 3){
@@ -386,7 +369,7 @@ pub fn auth_pass(mut stream: TcpStream, buffer: Request) {
     }
 
     let status_line = "HTTP/1.1 200 OK\r\n";
-    let site = web(buffer);
+    let site = web(&mut stream, buffer);
 
     if !memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some() {
         send_error_response(&mut stream, 400, "There has been an error generating the webpage");
@@ -394,7 +377,7 @@ pub fn auth_pass(mut stream: TcpStream, buffer: Request) {
         return;
     }
 
-    let response = format!("{}Set-Cookie: Auth=\"user-{}-token\"; Path=/; HttpOnly; SameSite=Strict; Max-Age=3600\r\nLocation: /\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, user, site);
+    let response = format!("{}Set-Cookie: Auth=\"user-{}-token\"; Path=/; HttpOnly; SameSite=Strict; Max-Age=3600\r\nLocation: /\r\nSet-Cookie: Folder=\"folder--token\"; Path=/; SameSite=Strict; Max-Age=3600\r\nLocation: /\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n{}", status_line, user, site);
 
     // println!("\n\n\n\n\nresponse = \n{}", response);
     if let Err(e) = stream.write_all(response.as_bytes()) {

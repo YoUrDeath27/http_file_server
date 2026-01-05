@@ -44,26 +44,21 @@ pub fn upload_file(mut stream: TcpStream, buffer: Request) {
     return;
 }
 
-pub fn download_folder(mut stream: TcpStream, folder_name: String) {
-    let folder = match SHOW_FOLDER.lock(){
-            Ok(x) => x,
-            Err(e) => {
-                println!("cant identify the user from the folder mutex\n{:?}", e);
-                match log(&format!("Error identifying the: {}", e), 3){
-                    Ok(x) => x,
-                    Err(e) => {
-                        send_error_response(&mut stream, 400, &e);   
-                    } 
-                }
-                send_error_response(&mut stream, 500, "There is a problem that we dont know how u got here");
-                return;
-            }
-        }; 
+pub fn download_folder(mut stream: TcpStream, buffer: Request, folder_name: String) {
+    
+    let user = checkAuth(&mut stream, buffer.clone());
+    let folder = checkFolder(&mut stream, buffer.clone());
+    if user == "" || folder == "" {
+        send_error_response(&mut stream, 404, "There was a problem getting the auth key");
+        return;
+    }
+    let path = format!("{}/{}", user, folder);
+
     let zip_path = format!("{}.zip", folder_name);
     let folder_path;
     
-    if *folder != "" {
-        folder_path = format!("uploads/{}/{}", folder, folder_name);
+    if *folder != *"" {
+        folder_path = format!("uploads/{}/{}", path, folder_name);
     } else {
         folder_path = format!("uploads/{}", folder_name);
     }
@@ -261,24 +256,18 @@ fn zip_folder(folder_path: &Path, zip_path: &Path) -> Result<(), Box<dyn std::er
 
 pub fn rename_folder(mut stream: TcpStream, buffer: Request, old_folder: String, new_folder: String) {
     {
-        let folder = match SHOW_FOLDER.lock(){
-            Ok(x) => x,
-            Err(e) => {
-                println!("cant identify the user from the folder mutex\n{:?}", e);
-                match log(&format!("Error identifing the user from the Mutex: {}", e), 3){
-                    Ok(x) => x,
-                    Err(e) => {
-                        send_error_response(&mut stream, 400, &e);   
-                    } 
-                }
-                send_error_response(&mut stream, 500, "There is a problem that we dont know how u got here");
-                return;
-            }
-        };
-        if *folder != "" {
+        let user = checkAuth(&mut stream, buffer.clone());
+        let folder = checkFolder(&mut stream, buffer.clone());
+        if user == "" || folder == "" {
+            send_error_response(&mut stream, 404, "There was a problem getting the auth key");
+            return;
+        }
+        let path = format!("{}/{}", user, folder);
+
+        if folder != "" {
             // println!("before uploads/{}/{}", folder, old_folder);
             // println!("after uploads/{}/{}", folder, new_folder);
-            match fs::rename(format!("uploads/{}/{}", folder, old_folder), format!("uploads/{}/{}", folder, new_folder))  {
+            match fs::rename(format!("uploads/{}/{}", path, old_folder), format!("uploads/{}/{}", path, new_folder))  {
                 Ok(x) => x,
                 Err(e) => {
                     match log(&format!("{}", e), 3){
@@ -294,7 +283,7 @@ pub fn rename_folder(mut stream: TcpStream, buffer: Request, old_folder: String,
                     return;    
                 }
             };
-            match fs::rename(format!("data/{}/{}", folder, old_folder), format!("data/{}/{}", folder, new_folder)) {
+            match fs::rename(format!("data/{}/{}", path, old_folder), format!("data/{}/{}", path, new_folder)) {
                 Ok(x) => x,
                 Err(e) => {
                     match log(&format!("{}", e), 3){
@@ -313,7 +302,7 @@ pub fn rename_folder(mut stream: TcpStream, buffer: Request, old_folder: String,
         } else {
             // println!("uploads/{}", old_folder);
             // println!("uploads/{}", new_folder);
-            match fs::rename(format!("uploads/{}", old_folder), format!("uploads/{}", new_folder)) {
+            match fs::rename(format!("uploads/{}/{}", user, old_folder), format!("uploads/{}/{}", user, new_folder)) {
                 Ok(x) => x,
                 Err(e) => {
                     match log(&format!("{}", e), 3){
@@ -329,7 +318,7 @@ pub fn rename_folder(mut stream: TcpStream, buffer: Request, old_folder: String,
                     return;    
                 }
             };
-            match fs::rename(format!("data/{}", old_folder), format!("data/{}", new_folder)) {
+            match fs::rename(format!("data/{}/{}", user, old_folder), format!("data/{}/{}", user, new_folder)) {
                 Ok(x) => x,
                 Err(e) => {
                     match log(&format!("{}", e), 3){
@@ -352,7 +341,7 @@ pub fn rename_folder(mut stream: TcpStream, buffer: Request, old_folder: String,
 
     // println!("\n\nDone with the POST RENAME_FOLDER action request my guy");
 
-    let site = web(buffer);
+    let site = web(&mut stream, buffer);
     if !memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some() {
         match log("There was an error generating the web site", 3){
             Ok(x) => x,
@@ -374,6 +363,7 @@ pub fn rename_folder(mut stream: TcpStream, buffer: Request, old_folder: String,
             } 
         }
     }
+
     if let Err(e) = stream.flush() {
         eprintln!("Error flushing: {}", e);
         match log(&format!("Error flushing: {}", e), 3){
@@ -388,25 +378,16 @@ pub fn rename_folder(mut stream: TcpStream, buffer: Request, old_folder: String,
 pub fn delet(mut stream: TcpStream, filename: String, buffer: Request) {
         
     { 
-        let folder = match SHOW_FOLDER.lock(){
-            Ok(x) => x,
-            Err(e) => {
-                println!("cant identify the user from the folder mutex\n{:?}", e);
-                match log(&format!("Error identifying the user from the Mutex: {}", e), 3){
-                    Ok(x) => x,
-                    Err(e) => {
-                        send_error_response(&mut stream, 400, &e);   
-                    } 
-                }
-                send_error_response(&mut stream, 500, "There is a problem that we dont know how u got here");
-                return;
-            }
-        };
-        let folder1 = percent_decode_str(&*folder)
-                        .decode_utf8_lossy()
-                        .replace("+", " ")
-                        .to_owned();
-        if &*folder1 != "" {
+        let user = checkAuth(&mut stream, buffer.clone());
+        let folder = checkFolder(&mut stream, buffer.clone());
+        if user == "" || folder == "" {
+            send_error_response(&mut stream, 404, "There was a problem getting the auth key");
+            return;
+        }
+        let path = format!("{}/{}", user, folder);
+
+        let folder1 = path;
+        if folder1 != "" {
 
             // println!("\n\nbuffer={}\n\n\n{}", String::from_utf8_lossy(&buffer.header[..]), String::from_utf8_lossy(&buffer.body.clone().unwrap()[..]));
             if let Some(_) = memmem::find(&buffer.body.clone().unwrap()[..], b"folder=") {
@@ -544,7 +525,7 @@ pub fn delet(mut stream: TcpStream, filename: String, buffer: Request) {
     let status_line = "HTTP/1.1 200 OK\r\n";
 
     // println!("\n\nDone with the POST delete action request my guy");
-    let site = web(buffer);
+    let site = web(&mut stream, buffer);
     if !memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some() {
         match log("Error generating the web site", 3){
             Ok(x) => x,
@@ -576,29 +557,19 @@ pub fn delet(mut stream: TcpStream, filename: String, buffer: Request) {
     }
 }
 
-pub fn download(mut stream: TcpStream, filename: String) {
-    let folder;
-    {
-        folder = match SHOW_FOLDER.lock(){
-            Ok(x) => x,
-            Err(e) => {
-                println!("cant identify the user from the folder mutex\n{:?}", e);
-                match log(&format!("Error identifying the folder from the Mutex: {}", e), 3){
-                    Ok(x) => x,
-                    Err(e) => {
-                        send_error_response(&mut stream, 400, &e);   
-                    } 
-                }
-                send_error_response(&mut stream, 500, "There is a problem that we dont know how u got here");
-                return;
-            }
-        };
+pub fn download(mut stream: TcpStream, buffer: Request, filename: String) {
+    let user = checkAuth(&mut stream, buffer.clone());
+    let folder = checkFolder(&mut stream, buffer.clone());
+    if user == "" || folder == "" {
+        send_error_response(&mut stream, 404, "There was a problem getting the auth key");
+        return;
     }
+    let path = format!("{}/{}", user, folder);
 
     // let user = memmem::find()
 
     // println!("Filename ig ={}/{}",folder, filename);
-    let mut file = match fs::File::open(format!("uploads/{}/{}", folder, filename)){
+    let mut file = match fs::File::open(format!("uploads/{}/{}", path, filename)){
         Ok(x) => x,
         Err(e) => {
             println!("The user's uploads folder cannot be read\n{:?}", e);
@@ -612,7 +583,7 @@ pub fn download(mut stream: TcpStream, filename: String) {
             return;
         }
     };
-    let mut data = match fs::File::open(format!("data/{}/{}.txt", folder, filename)){
+    let mut data = match fs::File::open(format!("data/{}/{}.txt", path, filename)){
         Ok(x) => x,
         Err(e) => {
             println!("The user's data folder cannot be read\n{:?}", e);
@@ -855,29 +826,21 @@ pub fn add_folder(mut stream: TcpStream, buffer: Request, filename: String) {
     // println!("ADD_FOLDER\n  folder to add ={}", filename);
 
     {
-        let folder = match SHOW_FOLDER.lock(){
-            Ok(x) => x,
-            Err(e) => {
-                println!("cant identify the user from the folder mutex\n{:?}", e);
-                match log(&format!("Error identifying the user from Mutex: {}", e), 3){
-                Ok(x) => x,
-                Err(e) => {
-                    send_error_response(&mut stream, 400, &e);   
-                } 
-            }
-                send_error_response(&mut stream, 500, "There is a problem that we dont know how u got here");
-                return;
-            }
-        };
-        let folder = percent_decode_str(&*folder)
-                        .decode_utf8_lossy();
-        if *folder != *"" {
-            if Path::new(&format!("uploads/{}/{}", folder, filename)).exists() {
+        let user = checkAuth(&mut stream, buffer.clone());
+        let folder = checkFolder(&mut stream, buffer.clone());
+        if user == "" || folder == "" {
+            send_error_response(&mut stream, 404, "There was a problem getting the auth key");
+            return;
+        }
+        let path = format!("{}/{}", user, folder);
+
+        if folder != "" {
+            if Path::new(&format!("uploads/{}/{}", path, filename)).exists() {
                 send_error_response(&mut stream, 403, "Folder already exists");
-                println!("uploads/{}/{}", folder, filename);
+                println!("uploads/{}/{}", path, filename);
                 return;
             }
-            match fs::create_dir_all(format!("uploads/{}/{}", folder, filename)){
+            match fs::create_dir_all(format!("uploads/{}/{}", path, filename)){
                 Ok(x) => x,
                 Err(e) => {
                     println!("Unnable to create the folder {}", e);
@@ -891,7 +854,7 @@ pub fn add_folder(mut stream: TcpStream, buffer: Request, filename: String) {
                     return;
                 }
             }; // handle gracefully
-            match fs::create_dir_all(format!("data/{}/{}", folder, filename)){
+            match fs::create_dir_all(format!("data/{}/{}", path, filename)){
                 Ok(x) => x,
                 Err(e) => {
                     println!("Unnable to create the folder for data {}", e);
@@ -920,7 +883,7 @@ pub fn add_folder(mut stream: TcpStream, buffer: Request, filename: String) {
     }
 
     let status_line = "HTTP/1.1 200 OK\r\n";
-    let site = web(buffer);
+    let site = web(&mut stream, buffer);
     if !memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some() {
         match log("There was an error generating the site", 3){
             Ok(x) => x,
@@ -1031,27 +994,18 @@ fn add_file(
     }
 
     {
-        let folder = match SHOW_FOLDER.lock(){
-            Ok(x) => x,
-            Err(e) => {
-                println!("cant identify the user from the folder mutex\n{:?}", e);
-                match log(&format!("Error identifying the user from Mutex: {:?}", e), 3){
-                    Ok(x) => x,
-                    Err(e) => {
-                        send_error_response(&mut stream, 400, &e);   
-                    } 
-                }
-                send_error_response(&mut stream, 500, "There is a problem that we dont know how u got here");
-                return;
-            }
-        };
+        let user = checkAuth(&mut stream, buffer.clone());
+        let folder = checkFolder(&mut stream, buffer.clone());
+        if user == "" || folder == "" {
+            send_error_response(&mut stream, 404, "There was a problem getting the auth key");
+            return;
+        }
+        let path = format!("{}/{}", user, folder);
+
         // println!("folder im supposed to save the file={:?}", folder);
-        if *folder != "" {
+        if folder != "" {
             let filename_upload = format!("uploads/{}/{}", 
-                percent_decode_str(&folder)
-                .decode_utf8_lossy()
-                .replace("+", " ")
-                .to_owned(),
+                path,
                 disk_filename);
             // println!("upload filename ={}\n\n", filename_upload);
 
@@ -1074,10 +1028,7 @@ fn add_file(
             }
 
             let filename_data = format!("data/{}/{}.txt", 
-                percent_decode_str(&folder)
-                .decode_utf8_lossy()
-                .replace("+", " ")
-                .to_owned(),
+                path,
                 disk_filename);
             // println!("filename_data = {}", filename_data);
             // println!("filename_data = {}", filename_data);
@@ -1117,7 +1068,7 @@ fn add_file(
             //till here we saved the file on the server (hopefully)
 
         } else {
-            let filename_upload = format!("uploads/{}", disk_filename);
+            let filename_upload = format!("uploads/{}/{}", user, disk_filename);
             // println!("upload filename ={}", filename_upload);
 
             let mut file = fs::File::create(&filename_upload).unwrap();
@@ -1138,7 +1089,7 @@ fn add_file(
                 }
             }
 
-            let filename_data = format!("data/{}.txt", disk_filename);
+            let filename_data = format!("data/{}/{}.txt", user, disk_filename);
             // println!("filename_data = {}", filename_data);
             // println!("filename_data = {}", filename_data);
             let mut file2 = fs::File::create(&filename_data).unwrap();
@@ -1166,7 +1117,7 @@ fn add_file(
     let status_line = "HTTP/1.1 200 OK\r\n";
 
     // println!("\n\nDone with the POST add_file request my guy");
-    let site = web(buffer);
+    let site = web(&mut stream, buffer);
     if !memmem::find(site.as_bytes(), b"<!DOCTYPE html>").map(|p| p as usize).is_some() {
         match log("There was an error generating the web server", 3){
             Ok(x) => x,
@@ -1188,6 +1139,7 @@ fn add_file(
             } 
         }
     }
+   
     if let Err(e) = stream.flush() {
         eprintln!("Error flushing: {}", e);
         match log(&format!("Error flushing: {}", e), 3){

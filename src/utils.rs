@@ -673,13 +673,20 @@ pub fn bubble_sort() -> Result<Vec<String>, String> {
     Ok(Vec::new())
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Files {
+    list: Vec<FileNames>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FileNames{
     pub datapath: String,   //augu/sigma/1003-19-129.txt.txt
     pub dataname: String,   // 1003-19-129.txt.txt
     pub uploadspath: String,    //augu/sigma/1003-19-129.txt
     pub uploadsname: String,    //1003-19-129.txt
     pub realname: String,   // text.txt
+    pub file_type: String,
+    pub f_type: String,
     pub folder: String,
     pub date: String,
     pub time: String,
@@ -698,6 +705,8 @@ impl FileNames {
             uploadsname: String::from(""),
             realname: String::from(""),
             folder: String::from(""),
+            file_type: String::from(""),
+            f_type: String::from(""),
             date: String::from(""),
             time: String::from(""),
             is_file: false,
@@ -845,6 +854,8 @@ pub fn sorting(how: u8, user: String) -> Result<Vec<FileNames>, String> {
                     uploadsname: file_name.to_string(),
                     realname: file_name.clone(),
                     folder: fold.to_string(),
+                    file_type: String::from(""),
+                    f_type: String::from(""),
                     date: String::from(""),
                     time: String::from(""),
                     is_file: false,
@@ -877,7 +888,7 @@ pub fn sorting(how: u8, user: String) -> Result<Vec<FileNames>, String> {
         println!("attempted upload path: {}", upld_path);
 
 
-        let (name, date, time) = match get_data_info(data){
+        let (name, f_type, date, time) = match get_data_info(data){
             Ok(x) => x,
             Err(e) => {
                 println!("{:?}", e);
@@ -892,28 +903,18 @@ pub fn sorting(how: u8, user: String) -> Result<Vec<FileNames>, String> {
             }
         }; 
 
-        /* 
-        println!("entry ig to check: {:?}", entry);
-        let path = PathBuf::from(format!("{:?}", entry).replace(".txt", "").replace("\\\\", "/")); //there is a better way
+        let mut file_type = String::from("");
+        if IMAGE_TYPES.contains(&&*f_type) {
+            file_type = String::from("image");
+        } else if VIDEO_TYPES.contains(&&*f_type) {
+            file_type = String::from("video");
+        } else if TEXT_TYPES.contains(&&*f_type) {
+            file_type = String::from("text");
+        }
 
-        println!("path ig: {:?}", path);
 
-        let path = match get_path_fron_direntry(path.clone()){
-            Ok(x) => x,
-            Err(e) => {
-                println!("{:?}", e);
-                match log(&format!("{:?}", e), 1){
-                    Ok(x) => x,
-                    Err(_e) => {
-                        // send_error_response(&mut stream, 400, &e);   
-                        return Err(String::from(""));
-                    } 
-                }
-                return Err(String::from(""));
-            } 
-        };  
 
-        */
+
 
         let fold = String::from_utf8_lossy(&upld_path.as_bytes()[..upld_path.len() - (file_name.len() + 1)]);
         names.push(FileNames{
@@ -923,6 +924,8 @@ pub fn sorting(how: u8, user: String) -> Result<Vec<FileNames>, String> {
             uploadsname: upld_name.to_string(),
             realname: name.to_string(),
             folder: fold.to_string(),
+            file_type : file_type.to_string(),
+            f_type : f_type.to_string(),
             date: date.to_string(),
             time: time.to_string(),
             is_file: true,
@@ -962,8 +965,39 @@ pub fn sorting(how: u8, user: String) -> Result<Vec<FileNames>, String> {
             println!("\n\n\nsorted ig...{:#?}", sorted1);
 
             sorted1
-        }
+        },
+        4 => {
+            let sorted_folders = sort_fn(folders.clone());
+            let sorted_files = sort_fn(names.clone());
 
+            let mut sorted1 = Vec::new();
+            
+            for i in (0..sorted_folders.len()).rev(){
+                sorted1.push(sorted_folders[i].clone());
+            } 
+            for i in sorted_files{
+                sorted1.push(i);
+            }
+            sorted1
+        },
+        5 => { //reverse upload time order 
+
+            let sorted_folders = sort_fn(folders.clone());
+            let sorted_files = sort_fn_date(names.clone());
+
+            println!("\n\nnames: {:?}", names);
+            let mut sorted1 = Vec::new();
+            
+            for i in sorted_files{
+                sorted1.push(i);
+            }
+            for i in sorted_folders{
+                sorted1.push(i);
+            } 
+            println!("\n\n\nsorted ig...{:#?}", sorted1);
+
+            sorted1
+        },
         _=> {
             //the default is in alphabetical order
             let sorted_folders = sort_fn(folders.clone());
@@ -988,336 +1022,6 @@ pub fn sorting(how: u8, user: String) -> Result<Vec<FileNames>, String> {
     Ok(sorted)
 }
 
-/* 
-pub fn alfabetical_order(user: String) -> Result<Vec<FileNames>, String> { //first insert sorting algorigthm, how did i do teacher?
-
-    match log("Sorting in alphabetical", 0){
-        Ok(x) => x,
-        Err(_) => {
-            return Err(String::from("Error reading logging"));
-        } 
-    }
-
-    let uploads = match fs::read_dir(format!("uploads/{}", user)){
-        Ok(x) => x,
-        Err(e) => {
-            println!("Unnable to read the folder\n{}", e);
-            match log(&format!("Error reading the uploads folder: {}\n While sorting duh", e), 3){
-                Ok(x) => x,
-                Err(_e) => {
-                    return Err(String::from("Error reading logging"));
-                } 
-            }
-            return Err(String::from("Error reading the uploads folder"));
-        }
-    };
-
-    let data = match fs::read_dir(format!("data/{}", user)){
-        Ok(x) => x,
-        Err(e) => {
-            println!("Unnable to read the folder\n{}", e);
-            match log(&format!("Error reading the data folder: {}\n While sorting duh", e), 3){
-                Ok(x) => x,
-                Err(_e) => {
-                    return Err(String::from("Error reading logging"));
-                } 
-            }
-            return Err(String::from("Error reading the data folder"));
-        }
-    };
-
-    let mut folders = Vec::new();
-    let mut names = Vec::new();
-
-    for entry in data {
-        let entry = match entry{
-            Ok(x) => x,
-            Err(e) => {
-                println!("No users uploads found\n{:?}", e);
-                match log(&format!("Error in finding uploaded files: {}", e), 1){
-                    Ok(x) => x,
-                    Err(_e) => {
-                        // send_error_response(&mut stream, 400, &e);   
-                        return Err(String::from(""));
-                    } 
-                }
-                return Err(String::from(""));
-            }
-        };
-
-        let file_name = match entry.file_name().into_string(){
-            Ok(x) => x,
-            Err(e) => {
-                println!("The user's username is unnable to be converted to string\n{:?}", e);
-                match log(&format!("Error converting the filename in a UTF-8 format: {:?}", e), 1){
-                    Ok(x) => x,
-                    Err(_e) => {
-                        // send_error_response(&mut stream, 400, &e);   
-                        return Err(String::from(""));
-                    } 
-                }
-                return Err(String::from(""));
-            }
-        };
-
-        println!("name: {:?}", file_name);
-
-        //if able to open file then search to get the file name
-
-        let data = match fs::read(format!("data/{}/{}", user, file_name)){
-            Ok(x) => x,
-            Err(e) => {
-                println!("The user's data file cannot be read\n{:?}", e);
-                match log(&format!("The user's data file cannot be read\n{:?}", e), 3){
-                    Ok(x) => x,
-                    Err(_e) => {
-                        // send_error_response(&mut stream, 400, &e);   
-                        return Err(String::from("Error logging"));
-                    } 
-                }
-                // return Err(String::from("Error reading the data file"));
-
-                // let path = PathBuf::from(format!("data/{}/{}", user, file_name));
-                
-                folders.push(FileNames{
-                    diskname: entry.path(),
-                    realname: file_name,
-                    date: String::from(""),
-                    time: String::from("")
-                });
-
-
-                continue;
-                // vec![0u8; 0]
-            }
-        };
-
-        let (name, date, time) = match get_data_info(data){
-            Ok(x) => x,
-            Err(e) => {
-                println!("{:?}", e);
-                match log(&format!("{:?}", e), 1){
-                    Ok(x) => x,
-                    Err(_e) => {
-                        // send_error_response(&mut stream, 400, &e);   
-                        return Err(String::from(""));
-                    } 
-                }
-                return Err(String::from(""));
-            }
-        };
-
-        
-        // let path = PathBuf::from(format!("{:?}", entry).replace(".txt", ""));
-
-        names.push(FileNames{
-            diskname: entry.path(),
-            realname: name.to_string(),
-            date: date.to_string(),
-            time: time.to_string(),
-        })
-        // let data = fs::File::open(format!("{}", file_name));
-
-    }
-
-    let sorted_folders = sort_fn(folders.clone());
-    println!("empty\n\n\n\n");
-    let sorted_files = sort_fn(names.clone());
-    
-    println!("\nfolders: {:?}", sorted_folders);
-    println!("\nsorted: {:?}", sorted_files); //could do better???
-    // println!("len sorted: {}", sorted.len());
-    // println!("len unsorted: {}", sorting.len());
-
-
-    println!("\n\nnames: {:?}", names);
-
-    let mut sorted = Vec::new();
-    
-    for i in sorted_folders{
-        sorted.push(i);
-    } 
-    for i in sorted_files{
-        sorted.push(i);
-    }
-
-    println!("\n\nsorted: {:?}", sorted); //could do better???
-
-    Ok(sorted)
-        
-}
-
-pub fn upload_order(user: String) -> Result<Vec<FileNames>, String> {
-
-    let data = match fs::read_dir(format!("data/{}", user)){
-        Ok(x) => x,
-        Err(e) => {
-            println!("Unnable to read the folder\n{}", e);
-            match log(&format!("Error reading the data folder: {}\n While sorting duh", e), 3){
-                Ok(x) => x,
-                Err(_e) => {
-                    return Err(String::from("Error reading logging"));
-                } 
-            }
-            return Err(String::from("Error reading the data folder"));
-        }
-    };
-
-    let mut folders = Vec::new();
-    let mut names = Vec::new();
-
-    for entry in data {
-        let entry = match entry{
-            
-            Ok(x) => x,
-            Err(e) => {
-                println!("No users data found\n{:?}", e);
-                match log(&format!("Error in finding data files: {}", e), 1){
-                    Ok(x) => x,
-                    Err(_e) => {
-                        // send_error_response(&mut stream, 400, &e);   
-                        return Err(String::from(""));
-                    } 
-                }
-                return Err(String::from(""));
-            }
-        };
-
-        println!("Entry: {:?}", entry);
-        
-        let file_name = match entry.file_name().into_string(){
-            Ok(x) => x,
-            Err(e) => {
-                println!("The user's username is unnable to be converted to string\n{:?}", e);
-                match log(&format!("Error converting the filename in a UTF-8 format: {:?}", e), 1){
-                    Ok(x) => x,
-                    Err(_e) => {
-                        // send_error_response(&mut stream, 400, &e);   
-                        return Err(String::from(""));
-                    } 
-                }
-                return Err(String::from(""));
-            }
-        };
-
-        println!("name: {:?}", file_name);
-
-        //if able to open file then search to get the file name
-
-        let data = match fs::read(format!("data/{}/{}", user, file_name)){
-            Ok(x) => x,
-            Err(e) => {
-                println!("The user's data file cannot be read\n{:?}", e);
-                match log(&format!("The user's data file cannot be read\n{:?}", e), 3){
-                    Ok(x) => x,
-                    Err(_e) => {
-                        // send_error_response(&mut stream, 400, &e);   
-                        return Err(String::from("Error logging"));
-                    } 
-                }
-                // return Err(String::from("Error reading the data file"));
-
-                // let path = PathBuf::from(format!("data/{}/{}", user, file_name));
-                
-                folders.push(FileNames{
-                    diskname: entry.path(),
-                    realname: file_name,
-                    date: String::from(""),
-                    time: String::from(""),
-                    is_file: false,
-                });
-
-
-                continue;
-                // vec![0u8; 0]
-            }
-        };
-
-
-        let (name, date, time) = match get_data_info(data){
-            Ok(x) => x,
-            Err(e) => {
-                println!("{:?}", e);
-                match log(&format!("{:?}", e), 1){
-                    Ok(x) => x,
-                    Err(_e) => {
-                        // send_error_response(&mut stream, 400, &e);   
-                        return Err(String::from(""));
-                    } 
-                }
-                return Err(String::from(""));
-            }
-        }; 
-
-        println!("entry ig to check: {:?}", entry);
-        let path = PathBuf::from(format!("{:?}", entry).replace(".txt", "").replace("\\\\", "/"));
-
-        println!("path ig: {:?}", path);
-
-        let path = match get_path_fron_direntry(path.clone()){
-            Ok(x) => x,
-            Err(e) => {
-                println!("{:?}", e);
-                match log(&format!("{:?}", e), 1){
-                    Ok(x) => x,
-                    Err(_e) => {
-                        // send_error_response(&mut stream, 400, &e);   
-                        return Err(String::from(""));
-                    } 
-                }
-                return Err(String::from(""));
-            } 
-        };
-
-        names.push(FileNames{
-            diskname: entry.path(),
-            realname: name.to_string(),
-            date: date.to_string(),
-            time: time.to_string(),
-        })
-        // let data = fs::File::open(format!("{}", file_name));
-
-    }
-
-
-    let sorted_folders = sort_fn(folders.clone());
-    println!("empty\n\n\n\n");
-    let sorted_files = sort_fn_date(names.clone());
-
-    println!("\n\nnames: {:?}", names);
-
-//     data entryes names ["1cbe97fc-74fb-4cb2-987b-e018f636be41.png.txt", "77e05d75-cbd0-4787-8a6a-abecb3fbca12.png.txt", "a", "e559d9bf-6522-47b1-a6c0-f7bdbb3121e5.png.txt", "l", "sigma", "t"] 
-// names: [FileNames { diskname: "data/augu\\1cbe97fc-74fb-4cb2-987b-e018f636be41.png.txt", realname: "erm.png", date: "2025-12-17", time: "10:55:32" }, FileNames { diskname: "data/augu\\77e05d75-cbd0-4787-8a6a-abecb3fbca12.png.txt", realname: "Dexter_morgan.png", date: "2025-12-17", time: "10:54:59" }, FileNames { diskname: "data/augu\\e559d9bf-6522-47b1-a6c0-f7bdbb3121e5.png.txt", realname: "Dexter_morgan_2.png", date: "2025-12-17", time: "10:55:58" }]
-
-
-/*  sorted upload time: [
-        FileNames { diskname: "data/augu/a", realname: "a", date: "", time: "" }, 
-        FileNames { diskname: "data/augu/l", realname: "l", date: "", time: "" }, 
-        FileNames { diskname: "data/augu/sigma", realname: "sigma", date: "", time: "" }, 
-        FileNames { diskname: "data/augu/t", realname: "t", date: "", time: "" }, 
-        FileNames { diskname: "data/augu\\77e05d75-cbd0-4787-8a6a-abecb3fbca12.png.txt", realname: "Dexter_morgan.png", date: "2025-12-17", time: "10:54:59" }, 
-        FileNames { diskname: "data/augu\\e559d9bf-6522-47b1-a6c0-f7bdbb3121e5.png.txt", realname: "Dexter_morgan_2.png", date: "2025-12-17", time: "10:55:58" }, 
-        FileNames { diskname: "data/augu\\1cbe97fc-74fb-4cb2-987b-e018f636be41.png.txt", realname: "erm.png", date: "2025-12-17", time: "10:55:32" }]
-
-        not in the right order, why is that?
-*/
-    let mut sorted = Vec::new();
-    
-    for i in sorted_files{
-        sorted.push(i);
-    }
-    for i in sorted_folders{
-        sorted.push(i);
-    } 
-
-    println!("\n\nsorted upload time: {:?}", sorted); //could do better???
-
-    Ok(sorted)
-        
-}
-
-*/
-
 fn sort_fn(list: Vec<FileNames>) -> Vec<FileNames> {
 
     let mut lower_list = Vec::new();
@@ -1332,6 +1036,8 @@ fn sort_fn(list: Vec<FileNames>) -> Vec<FileNames> {
             uploadsname: list[i].uploadsname.clone(),
             realname: list[i].realname.to_lowercase(),
             folder: list[i].folder.clone(),
+            file_type: list[i].file_type.clone(),
+            f_type: list[i].f_type.clone(),
             date: list[i].date.clone(),
             time: list[i].time.clone(),
             is_file: list[i].is_file.clone()
@@ -1520,7 +1226,24 @@ fn sort_fn_date(list: Vec<FileNames>) -> Vec<FileNames> {
     sorted
 }
 
-fn get_data_info(data:Vec<u8>) -> Result<(String, String, String), String> {
+fn get_data_info(data:Vec<u8>) -> Result<(String, String, String, String), String> {
+        let end = match memmem::find(&data[..], b";").map(|p| p as usize) {
+            Some(x) => x,
+            None => {
+                println!("The user's data file probably got corrupted");
+                match log("The user's data file probably got corrupted", 3){
+                    Ok(x) => x,
+                    Err(_e) => {
+                        // send_error_response(&mut stream, 400, &e);   
+                        return Err(String::from("Error logging"));
+                    } 
+                }
+                // return Err(String::from("Error reading the data file"));
+                return Err(String::from("The user's data file probably got corrupted"));
+            }
+        };
+
+        let file_type = &data["Content-Type:".len()..end];
     
         let start = match memmem::find(&data[..], b"file_name:\"").map(|p| p as usize) {
             Some(x) => x,
@@ -1626,6 +1349,7 @@ fn get_data_info(data:Vec<u8>) -> Result<(String, String, String), String> {
 
         return Ok((
             String::from_utf8_lossy(&name[..]).to_string(),
+            String::from_utf8_lossy(&file_type[..]).to_string(),
             String::from_utf8_lossy(&date[..]).to_string(),
             String::from_utf8_lossy(&time[..]).to_string(),
         ))
@@ -1676,6 +1400,119 @@ pub fn get_path_fron_direntry(dir: PathBuf) -> Result<PathBuf, String> {
     Ok(PathBuf::from(path))
 }
 
+pub fn give_files(mut stream: TcpStream, buffer: Request){
+    //{"order":"0"}
+
+    let order = match memmem::find(&buffer.body.clone().unwrap(), b"{\"order\":\"").map(|p| p as usize) {
+        Some(x) => x,
+        None => {
+            println!("impossible to not find");
+            send_error_response(&mut stream, 400, "Wasnt able to find the order to sort the files");
+            return;
+        }
+    };
+
+    let order = &buffer.body.clone().unwrap()[order + "{\"order\":\"".len()..buffer.body.clone().unwrap().len() - 2];
+    println!("order :{}", String::from_utf8_lossy(&order[..]));
+
+    let order = String::from_utf8_lossy(&order[..]).parse::<u8>().unwrap();
+    println!("order :{}", order);
+
+
+    let user = checkAuth(&mut stream, buffer.clone());
+    let folder = checkFolder(&mut stream, buffer.clone());
+
+    if user == ""{
+        println!("user: {}", user);
+        println!("there was a problem getting the auth key");
+        send_error_response(&mut stream, 404, "There was a problem getting the auth key");
+        return;
+    }
+    let path = format!("{}/{}", user, folder);  
+
+    let sorted =match sorting(order, path){
+            Ok(x) => x,
+            Err(e) => {
+                send_error_response(&mut stream, 400, &format!("There was an error sorting the files {}", e));
+                return;
+            }
+    };
+
+    println!("sorted: {:#?}", sorted); // didtn return shit that's why
+    // let s = &format!("{:?}", sorted);
+    let json = serde_json::to_string(&sorted).unwrap();
+
+    println!("json = {}", json);
+
+    let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                json.len(),
+                json
+            );
+
+    if let Err(e) = stream.write_all(response.as_bytes()) {
+        eprintln!("Write error: {}", e);
+        match log(&format!("Write error: {}", e), 3){
+            Ok(x) => x,
+            Err(e) => {
+                send_error_response(&mut stream, 400, &e);   
+            } 
+        }
+    }
+    if let Err(e) = stream.flush() {
+        eprintln!("Error flushing: {}", e);
+        match log(&format!("Error flushing: {}", e), 3){
+            Ok(x) => x,
+            Err(e) => {
+                send_error_response(&mut stream, 400, &e);   
+            } 
+        }
+    }
+
+}
+
+pub fn checkAuth(stream: &mut TcpStream, buffer: Request) -> String {
+    // Cookie: Auth="user-augu-token"; Folder="folder--token"
+    let body = buffer.header;
+    let start = match memmem::find(&body[..], b"Auth=\"user-").map(|p| p as usize){
+        Some(x) => x,
+        None => {
+            // send_error_response(stream, 404, "Unnable to get auth key");
+            return String::from("");
+        }
+    };
+    let body = &body[start + "Auth=\"user-".len()..];
+    let end = match memmem::find(&body[..], b"-token").map(|p| p as usize){
+        Some(x) => x,
+        None => {
+            // send_error_response(stream, 404, "Unnable to get auth key");
+            return String::from("");
+        }
+    };
+
+    return String::from_utf8_lossy(&body[..end]).to_string();
+}
+
+pub fn checkFolder(stream: &mut TcpStream, buffer: Request) -> String {
+let body = buffer.header;
+    let start = match memmem::find(&body[..], b"Folder=\"folder-").map(|p| p as usize){
+        Some(x) => x,
+        None => {
+            // send_error_response(stream, 404, "Unnable to get auth key");
+            return String::from("");
+        }
+    };
+    let body = &body[start + "Folder=\"folder-".len()..];
+    let end = match memmem::find(&body[..], b"-token").map(|p| p as usize){
+        Some(x) => x,
+        None => {
+            // send_error_response(stream, 404, "Unnable to get auth key");
+            return String::from("");
+        }
+    };
+
+    return String::from_utf8_lossy(&body[..end]).to_string();
+}
 //more to come
 pub const MAX_UPLOAD_SIZE: usize = 100 * 1024 * 1024; // 100MB
 
