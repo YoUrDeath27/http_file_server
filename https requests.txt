@@ -1,0 +1,192 @@
+GET / HTTP/1.1
+Host: 127.0.0.1:7878
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:144.0) Gecko/20100101 Firefox/144.0
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate, br, zstd
+Connection: keep-alive
+Upgrade-Insecure-Requests: 1
+Sec-Fetch-Dest: document
+Sec-Fetch-Mode: navigate
+Sec-Fetch-Site: none
+Sec-Fetch-User: ?1
+Priority: u=0, i
+
+
+
+POST / HTTP/1.1
+Host: 127.0.0.1:7878
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:144.0) Gecko/20100101 Firefox/144.0
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate, br, zstd
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 23
+Origin: http://127.0.0.1:7878
+Connection: keep-alive
+Referer: http://127.0.0.1:7878/
+Upgrade-Insecure-Requests: 1
+Sec-Fetch-Dest: document
+Sec-Fetch-Mode: navigate
+Sec-Fetch-Site: same-origin
+Sec-Fetch-User: ?1
+Priority: u=0, i
+
+user=augu&password=augu
+
+
+
+GET /uploads/augu/Rocket_League_(64-bit,_DX11,_Cooked)_2025-09-18_18-00-19.mp4 HTTP/1.1
+Host: 127.0.0.1:7878
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:144.0) Gecko/20100101 Firefox/144.0
+Accept: video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5
+Accept-Language: en-US,en;q=0.5
+Range: bytes=0-
+Connection: keep-alive
+Referer: http://127.0.0.1:7878/
+Cookie: Auth="user-augu-token"
+Sec-Fetch-Dest: video
+Sec-Fetch-Mode: no-cors
+Sec-Fetch-Site: same-origin
+Accept-Encoding: identity
+Priority: u=4
+
+
+
+POST / HTTP/1.1
+Host: 127.0.0.1:7878
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:144.0) Gecko/20100101 Firefox/144.0
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate, br, zstd
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 42
+Origin: http://127.0.0.1:7878
+Connection: keep-alive
+Referer: http://127.0.0.1:7878/
+Cookie: Auth="user-augu-token"
+Upgrade-Insecure-Requests: 1
+Sec-Fetch-Dest: document
+Sec-Fetch-Mode: navigate
+Sec-Fetch-Site: same-origin
+Sec-Fetch-User: ?1
+Priority: u=0, i
+
+action=DELETE&filename=Dexter_morgan_2.png
+
+
+
+POST / HTTP/1.1
+Host: 127.0.0.1:7878
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:144.0) Gecko/20100101 Firefox/144.0
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate, br, zstd
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 37
+Origin: http://127.0.0.1:7878
+Connection: keep-alive
+Referer: http://127.0.0.1:7878/
+Cookie: Auth="user-augu-token"
+Upgrade-Insecure-Requests: 1
+Sec-Fetch-Dest: document
+Sec-Fetch-Mode: navigate
+Sec-Fetch-Site: same-origin
+Sec-Fetch-User: ?1
+Priority: u=0, i
+
+action=DELETE&folder=lol&filename=lol
+
+
+
+
+POST / HTTP/1.1
+Host: 127.0.0.1:7878
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:144.0) Gecko/20100101 Firefox/144.0
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate, br, zstd
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 37
+Origin: http://127.0.0.1:7878
+Connection: keep-alive
+Referer: http://127.0.0.1:7878/
+Cookie: Auth="user-augu-token"
+Upgrade-Insecure-Requests: 1
+Sec-Fetch-Dest: document
+Sec-Fetch-Mode: navigate
+Sec-Fetch-Site: same-origin
+Sec-Fetch-User: ?1
+Priority: u=0, i
+
+action=ADD_FOLDER&filename=%2520%2520
+
+
+
+POST / HTTP/1.1
+Host: 127.0.0.1:7878
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:144.0) Gecko/20100101 Firefox/144.0
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate, br, zstd
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 93
+Origin: http://127.0.0.1:7878
+Connection: keep-alive
+Referer: http://127.0.0.1:7878/
+Cookie: Auth="user-augu-token"
+Upgrade-Insecure-Requests: 1
+Sec-Fetch-Dest: document
+Sec-Fetch-Mode: navigate
+Sec-Fetch-Site: same-origin
+Sec-Fetch-User: ?1
+Priority: u=0, i
+
+action=DOWNLOAD&filename=Rocket_League_%2864-bit%2C_DX11%2C_Cooked%29_2025-09-18_18-00-19.mp4
+
+
+
+POST / HTTP/1.1
+Host: 127.0.0.1:7878
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:144.0) Gecko/20100101 Firefox/144.0
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate, br, zstd
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 35
+Origin: http://127.0.0.1:7878
+Connection: keep-alive
+Referer: http://127.0.0.1:7878/
+Cookie: Auth="user-augu-token"
+Upgrade-Insecure-Requests: 1
+Sec-Fetch-Dest: document
+Sec-Fetch-Mode: navigate
+Sec-Fetch-Site: same-origin
+Sec-Fetch-User: ?1
+Priority: u=0, i
+
+action=DOWNLOAD_FOLDER&filename=lol
+
+
+
+POST / HTTP/1.1
+Host: 127.0.0.1:7878
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:144.0) Gecko/20100101 Firefox/144.0
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate, br, zstd
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 52
+Origin: http://127.0.0.1:7878
+Connection: keep-alive
+Referer: http://127.0.0.1:7878/
+Cookie: Auth="user-augu-token"
+Upgrade-Insecure-Requests: 1
+Sec-Fetch-Dest: document
+Sec-Fetch-Mode: navigate
+Sec-Fetch-Site: same-origin
+Sec-Fetch-User: ?1
+Priority: u=0, i
+
+action=RENAME_FOLDER&filename=digma&newFile=directed
+
