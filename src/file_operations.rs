@@ -14,7 +14,7 @@ pub fn upload_file(mut stream: TcpStream, buffer: Request) {
 
 
     let mut buffer1 = buffer.clone();
-    let (content, content_type, filename) = match parse_file(&mut stream, &mut buffer1, &boundary) {
+    let (content, content_type, filename, length) = match parse_file(&mut stream, &mut buffer1, &boundary) {
         Ok(data) => data,
         Err(e) => {
             send_error_response(&mut stream, 400, &format!("Failed to parse request, {}", e));
@@ -24,7 +24,7 @@ pub fn upload_file(mut stream: TcpStream, buffer: Request) {
 
     println!("filename uploaded: {}", filename);
     if !ALLOWED_MIME_TYPES.contains(&&*content_type) {
-        println!("sontent_type ={}", content_type);
+        println!("sontent_type = {}", content_type);
         match log("The user tried to upload a file that is not supported", 3){
             Ok(x) => x,
             Err(e) => {
@@ -36,11 +36,11 @@ pub fn upload_file(mut stream: TcpStream, buffer: Request) {
     }
 
     if let Some(_) = memmem::find(&buffer.body.clone().unwrap()[..], b"name=\"folder\"").map(|p| p as usize) {
-        add_file_in_folder(stream, buffer, &content, &content_type, filename);
+        add_file_in_folder(stream, buffer, &content, &content_type, filename, length);
         return;
     }
 
-    add_file(stream, buffer, &content, &content_type, filename);
+    add_file(stream, buffer, &content, &content_type, filename, length);
     return;
 }
 
@@ -48,7 +48,7 @@ pub fn download_folder(mut stream: TcpStream, buffer: Request, folder_name: Stri
     
     let user = checkAuth(&mut stream, buffer.clone());
     let folder = checkFolder(&mut stream, buffer.clone());
-    if user == "" || folder == "" {
+    if user == ""{
         send_error_response(&mut stream, 404, "There was a problem getting the auth key");
         return;
     }
@@ -258,7 +258,7 @@ pub fn rename_folder(mut stream: TcpStream, buffer: Request, old_folder: String,
     {
         let user = checkAuth(&mut stream, buffer.clone());
         let folder = checkFolder(&mut stream, buffer.clone());
-        if user == "" || folder == "" {
+        if user == ""  {
             send_error_response(&mut stream, 404, "There was a problem getting the auth key");
             return;
         }
@@ -380,7 +380,7 @@ pub fn delet(mut stream: TcpStream, filename: String, buffer: Request) {
     { 
         let user = checkAuth(&mut stream, buffer.clone());
         let folder = checkFolder(&mut stream, buffer.clone());
-        if user == "" || folder == "" {
+        if user == "" {
             send_error_response(&mut stream, 404, "There was a problem getting the auth key");
             return;
         }
@@ -560,7 +560,7 @@ pub fn delet(mut stream: TcpStream, filename: String, buffer: Request) {
 pub fn download(mut stream: TcpStream, buffer: Request, filename: String) {
     let user = checkAuth(&mut stream, buffer.clone());
     let folder = checkFolder(&mut stream, buffer.clone());
-    if user == "" || folder == "" {
+    if user == "" {
         send_error_response(&mut stream, 404, "There was a problem getting the auth key");
         return;
     }
@@ -828,7 +828,7 @@ pub fn add_folder(mut stream: TcpStream, buffer: Request, filename: String) {
     {
         let user = checkAuth(&mut stream, buffer.clone());
         let folder = checkFolder(&mut stream, buffer.clone());
-        if user == "" || folder == "" {
+        if user == "" {
             send_error_response(&mut stream, 404, "There was a problem getting the auth key");
             return;
         }
@@ -916,12 +916,13 @@ pub fn add_folder(mut stream: TcpStream, buffer: Request, filename: String) {
     
 }
 
-fn add_file_in_folder(
+fn add_file_in_folder( //tehnic nici macar nu ai nevoie de this shit
     mut stream: TcpStream,
     buffer: Request,
     content: &[u8],
     content_type: &str,
     filename: String,
+    length: i64,
 ) {
     let folder = match memmem::find(&buffer.body.clone().unwrap()[..], b"name=\"folder\"").map(|p| p as usize) {
         Some(f) => f,
@@ -964,7 +965,7 @@ fn add_file_in_folder(
 
     // println!("filename after change = {}", filename);
 
-    add_file(stream, buffer, content, content_type, filename);
+    add_file(stream, buffer, content, content_type, filename, length);
 }
 
 fn add_file(
@@ -973,6 +974,7 @@ fn add_file(
     content: &[u8],
     content_type: &str,
     filename: String,
+    length: i64,
 ) {
     // do some shady shit
 
@@ -981,139 +983,108 @@ fn add_file(
 
     let mut disk_filename = String::from(disk_filename);
 
-    let extension = match memmem::rfind(&user_filename.as_bytes()[..], b".").map(|p| p as usize){
+    let user = checkAuth(&mut stream, buffer.clone());
+    let folder = checkFolder(&mut stream, buffer.clone());
+    if user == ""  {
+        send_error_response(&mut stream, 404, "There was a problem getting the auth key");
+        return;
+    }
+
+    let extension = match memmem::rfind(&filename.as_bytes()[..], b".").map(|p| p as usize) {
         Some(x) => x,
-        None => 9999999999,
+        None => {
+            match log("There was an error getting the extension", 3){
+                Ok(x) => x,
+                Err(e) => {
+                    println!("{}", e);
+                    send_error_response(&mut stream, 400, &e);
+                    return;
+                }
+            }
+
+        send_error_response(&mut stream, 400, "Failed to get the extension");
+        return;    
+        }
+    };
+    let extension = &filename[extension ..];
+    let path = format!("{}/{}", user, folder);
+
+    // println!("folder im supposed to save the file={:?}", folder);
+    //first of all the logic is wrong
+        //and also make it so thatit appends the file end as it should yk?
+        //IMPORTANT************************************************************************************************************
+    let filename_upload = format!("uploads/{}/{}{}", 
+        path,
+        disk_filename,
+        extension
+    );
+
+    println!("upload filename ={}\n\n", filename_upload);
+
+    let mut file = fs::File::create(&filename_upload).unwrap();
+    match file.write_all(content) {
+        Ok(x) => x,
+        Err(e) => {
+            match log(&format!("{}", e), 3){
+                Ok(x) => x,
+                Err(e) => {
+                    println!("{}", e);
+                    send_error_response(&mut stream, 400, &e);
+                    return;
+                }
+            }
+
+        send_error_response(&mut stream, 400, "Failed to write to file");
+        return;    
+        }
+    }
+
+    let filename_data = format!("data/{}/{}{}.txt", 
+        path,
+        disk_filename,
+        extension
+    );
+    // println!("filename_data = {}", filename_data);
+    // println!("filename_data = {}", filename_data);
+
+    let date = match get_date() {
+        Ok(x) => x,
+        Err(e) => {
+            println!("Error getting the date: {}", e);
+            panic!("YOu are fucked because chronos doesnt work (date)");
+        }   
     };
 
-    if extension== 9999999999 {
-        disk_filename.push_str(".txt");
-    } else {
-        let extension = &filename.as_bytes()[extension..];
-        disk_filename.push_str(&String::from_utf8(extension.to_vec()).unwrap());
-    }
+    let time = match get_time() {
+        Ok(x) => x,
+        Err(e) => {
+            println!("Error getting the date: {}", e);
+            panic!("YOu are fucked because chronos doesnt work (time)");
+        }   
+    };
 
-    {
-        let user = checkAuth(&mut stream, buffer.clone());
-        let folder = checkFolder(&mut stream, buffer.clone());
-        if user == "" || folder == "" {
-            send_error_response(&mut stream, 404, "There was a problem getting the auth key");
-            return;
-        }
-        let path = format!("{}/{}", user, folder);
-
-        // println!("folder im supposed to save the file={:?}", folder);
-        if folder != "" {
-            let filename_upload = format!("uploads/{}/{}", 
-                path,
-                disk_filename);
-            // println!("upload filename ={}\n\n", filename_upload);
-
-            let mut file = fs::File::create(&filename_upload).unwrap();
-            match file.write_all(content) {
+    let mut file2 = fs::File::create(&filename_data).unwrap();
+    match file2.write_all(
+        &format!("Content-Type:{};file_name:\"{}\";
+        date:\"{}\";
+        time:\"{}\";
+        Content-Length: \"{}\"", content_type, user_filename, date, time, length).into_bytes()[..]) {
+        Ok(x) => x,
+        Err(e) => {
+            match log(&format!("{}", e), 3){
                 Ok(x) => x,
                 Err(e) => {
-                    match log(&format!("{}", e), 3){
-                        Ok(x) => x,
-                        Err(e) => {
-                            println!("{}", e);
-                            send_error_response(&mut stream, 400, &e);
-                            return;
-                        }
-                    }
-
-                send_error_response(&mut stream, 400, "Failed to write to file");
-                return;    
+                    println!("{}", e);
+                    send_error_response(&mut stream, 400, &e);
+                    return;
                 }
             }
 
-            let filename_data = format!("data/{}/{}.txt", 
-                path,
-                disk_filename);
-            // println!("filename_data = {}", filename_data);
-            // println!("filename_data = {}", filename_data);
-
-            let date = match get_date() {
-                Ok(x) => x,
-                Err(e) => {
-                    println!("Error getting the date: {}", e);
-                    panic!("YOu are fucked because chronos doesnt work (date)");
-                }   
-            };
-
-            let time = match get_time() {
-                Ok(x) => x,
-                Err(e) => {
-                    println!("Error getting the date: {}", e);
-                    panic!("YOu are fucked because chronos doesnt work (time)");
-                }   
-            };
-            let mut file2 = fs::File::create(&filename_data).unwrap();
-            match file2.write_all(&format!("Content-Type:{};\r\nfile_name:\"{}\";\r\ndate:\"{}\";\r\ntime:\"{}\";", content_type, user_filename, date, time).into_bytes()[..]) {
-                Ok(x) => x,
-                Err(e) => {
-                    match log(&format!("{}", e), 3){
-                        Ok(x) => x,
-                        Err(e) => {
-                            println!("{}", e);
-                            send_error_response(&mut stream, 400, &e);
-                            return;
-                        }
-                    }
-
-                send_error_response(&mut stream, 400, "Failed to write to data file");
-                return;    
-                }
-            }//idk how this works
-            //till here we saved the file on the server (hopefully)
-
-        } else {
-            let filename_upload = format!("uploads/{}/{}", user, disk_filename);
-            // println!("upload filename ={}", filename_upload);
-
-            let mut file = fs::File::create(&filename_upload).unwrap();
-            match file.write_all(content) {
-                Ok(x) => x,
-                Err(e) => {
-                    match log(&format!("{}", e), 3){
-                        Ok(x) => x,
-                        Err(e) => {
-                            println!("{}", e);
-                            send_error_response(&mut stream, 400, &e);
-                            return;
-                        }
-                    }
-
-                send_error_response(&mut stream, 400, "Failed to write to file");
-                return;    
-                }
-            }
-
-            let filename_data = format!("data/{}/{}.txt", user, disk_filename);
-            // println!("filename_data = {}", filename_data);
-            // println!("filename_data = {}", filename_data);
-            let mut file2 = fs::File::create(&filename_data).unwrap();
-
-            match file2.write_all(&format!("Content-Type:{};\r\nfile_name:\"{}\"", content_type, user_filename).into_bytes()[..]) {
-                Ok(x) => x,
-                Err(e) => {
-                    match log(&format!("{}", e), 3){
-                        Ok(x) => x,
-                        Err(e) => {
-                            println!("{}", e);
-                            send_error_response(&mut stream, 400, &e);
-                            return;
-                        }
-                    }
-
-                send_error_response(&mut stream, 400, "Failed to write to data file");
-                return;    
-                }
-            } //idk how this works
-            //till here we saved the file on the server (hopefully)
+        send_error_response(&mut stream, 400, "Failed to write to data file");
+        return;    
         }
-    }
-
+    }//idk how this works
+    //till here we saved the file on the server (hopefully)
     let status_line = "HTTP/1.1 200 OK\r\n";
 
     // println!("\n\nDone with the POST add_file request my guy");

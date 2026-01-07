@@ -14,7 +14,7 @@ pub fn decode_and_check_path(buffer:Request) -> Result<String, ()> { //can it ge
         String::from_utf8_lossy(&buffer.header.clone()[..]), 
     ); //decode here the string and then parse it 
 
-    println!("the post body: {:?}", String::from_utf8_lossy(&buffer.body.clone().unwrap()[..]));
+    // println!("the post body: {:?}", String::from_utf8_lossy(&buffer.body.clone().unwrap()[..]));
 
     if path_traversal_check(&String::from_utf8_lossy(&buffer.header.clone()[..])) {
         return Err(());

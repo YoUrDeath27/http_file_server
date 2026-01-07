@@ -362,7 +362,7 @@ pub fn parse_file<'a>(
     stream: &mut TcpStream,
     buffer: &'a mut Request,
     boundary: &[u8],
-) -> Result<(Vec<u8>, String, String), &'static str> {
+) -> Result<(Vec<u8>, String, String, i64), &'static str> {
     let content_boundary = match memmem::find_iter(buffer.body.as_ref().unwrap(), &boundary)
         .map(|p| p as usize)
         .next()
@@ -397,7 +397,7 @@ pub fn parse_file<'a>(
         None => {
             println!("We might have some trouble boss");
             send_error_response(stream, 500, "Why are you trying to break the server boss?");
-            return Ok(((&[]).to_vec(), String::from(""), Default::default()));
+            return Ok(((&[]).to_vec(), String::from(""), Default::default(), 0));
         }
     };
 
@@ -413,7 +413,7 @@ pub fn parse_file<'a>(
                 None => {
                     println!("This is not ok ");
                     send_error_response(stream, 500, "This file or request is corrupted <br> stop it");
-                    return Ok(((&[]).to_vec(), String::from(""), Default::default()));
+                    return Ok(((&[]).to_vec(), String::from(""), Default::default(), 0));
                 }
             };
         let content_type = &content_type[..end];
@@ -430,7 +430,7 @@ pub fn parse_file<'a>(
                 None => {
                     println!("Why does this file not have a name?");
                     send_error_response(stream, 400, "The file u tried to upload does not contain a name<br>weird");
-                    return Ok(((&[]).to_vec(), String::from(""), Default::default()));
+                    return Ok(((&[]).to_vec(), String::from(""), Default::default(), 0));
                 }
             };
         let filename_data = &info[filename + "filename=".len()..];
@@ -441,7 +441,7 @@ pub fn parse_file<'a>(
             None => {
                 println!("Nope");
                 send_error_response(stream, 400, "Did you play around before sending this file?");
-                return Ok(((&[]).to_vec(), String::from(""), Default::default()));
+                return Ok(((&[]).to_vec(), String::from(""), Default::default(), 0));
             }
         };
         let filename_2 = match filename1.next() {
@@ -449,7 +449,7 @@ pub fn parse_file<'a>(
             None => {
                 println!("Nope");
                 send_error_response(stream, 400, "Did you play around before sending this file? <br>Are you sure about that?");
-                return Ok(((&[]).to_vec(), String::from(""), Default::default()));
+                return Ok(((&[]).to_vec(), String::from(""), Default::default(), 0));
             }
         };
         let filename = &filename_data[filename_1 + 1..filename_2];
@@ -467,6 +467,7 @@ pub fn parse_file<'a>(
             content.to_vec(),
             String::from_utf8(content_type.to_vec()).unwrap_or(String::from("application/octet-stream")),
             file.replace(" ", "_"),
+            0
         ));
     }
     let content_type = &buffer.body.clone().unwrap()[content_type + "Content-Type:\"".len()..];
@@ -480,7 +481,7 @@ pub fn parse_file<'a>(
             None => {
                 println!("Looks like someone played around a bit");
                 send_error_response(stream, 400, "The file/request has probably been corrupted during transmission");
-                return Ok(((&[]).to_vec(), String::from(""), Default::default()));
+                return Ok(((&[]).to_vec(), String::from(""), Default::default(), 0));
             }
         };
     let content_type = &content_type[..end];
@@ -493,7 +494,7 @@ pub fn parse_file<'a>(
             None => {
                 println!("Why does this file not have a name?");
                 send_error_response(stream, 400, "The file u tried to upload does not contain a name<br>weird");
-                return Ok(((&[]).to_vec(), String::from(""), Default::default()));
+                return Ok(((&[]).to_vec(), String::from(""), Default::default(), 0));
             }
         };
     let filename_data = &info[filename + "filename=".len()..];
@@ -504,7 +505,7 @@ pub fn parse_file<'a>(
         None => {
             println!("Nope");
             send_error_response(stream, 400, "Did you play around before sending this file?");
-            return Ok(((&[]).to_vec(), String::from(""), Default::default()));
+            return Ok(((&[]).to_vec(), String::from(""), Default::default(), 0));
         }
     };
     let filename_2 = match filename1.next() {
@@ -512,10 +513,30 @@ pub fn parse_file<'a>(
         None => {
             println!("Nope");
             send_error_response(stream, 400, "Did you play around before sending this file? <br>Are you sure about that?");
-            return Ok(((&[]).to_vec(), String::from(""), Default::default()));
+            return Ok(((&[]).to_vec(), String::from(""), Default::default(), 0));
         }
     };
     let filename = &filename_data[filename_1 + 1..filename_2];
+
+    let length = match memmem::find(&buffer.header[..], b"Content-Length: ").map(|p| p as usize) {
+        Some(x) => x,
+        None => {
+            println!("Nope");
+            send_error_response(stream, 400, "Did you play around before sending this file?");
+            return Ok(((&[]).to_vec(), String::from(""), Default::default(), 0));
+        }
+    };
+
+    let length = &buffer.header[length + "Content-Length: ".len()..];
+    let end = match memmem::find(&length[..], b"\r\n").map(|p| p as usize) {
+        Some(x) => x,
+        None => {
+            println!("Nope");
+            send_error_response(stream, 400, "Did you play around before sending this file?");
+            return Ok(((&[]).to_vec(), String::from(""), Default::default(), 0));
+        }
+    };
+    let length = String::from_utf8_lossy(&length[..end]).parse::<i64>().unwrap();
 
     //3
     // println!("Parse Upload filename = {:?}", String::from_utf8_lossy(&filename_data[..]));
@@ -531,6 +552,7 @@ pub fn parse_file<'a>(
         content.to_vec(),
         String::from_utf8(content_type.to_vec()).unwrap_or(String::from("application/octet-stream")),
         decode_windows_1255(&filename[..]).replace(" ", "_"), //i think i should repplace this with encode_percent or smth so " " -> %20
+        length
     ))
 }
 
@@ -680,6 +702,7 @@ pub struct Files {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FileNames{
+    pub id: i64,
     pub datapath: String,   //augu/sigma/1003-19-129.txt.txt
     pub dataname: String,   // 1003-19-129.txt.txt
     pub uploadspath: String,    //augu/sigma/1003-19-129.txt
@@ -699,6 +722,7 @@ impl FileNames {
 
     pub fn new() -> Self {
         FileNames{
+            id: 0,
             datapath: String::from(""),
             dataname: String::from(""),
             uploadspath: String::from(""),
@@ -848,6 +872,7 @@ pub fn sorting(how: u8, user: String) -> Result<Vec<FileNames>, String> {
 
                 let fold = String::from_utf8_lossy(&upld_path.as_bytes()[..upld_path.len() - (file_name.len() + 1)]);
                 folders.push(FileNames{
+                    id: 0,
                     datapath: entry.path().display().to_string().replace("\\", "/"),
                     dataname: file_name.clone(),
                     uploadspath: upld_path.to_string(),
@@ -918,6 +943,7 @@ pub fn sorting(how: u8, user: String) -> Result<Vec<FileNames>, String> {
 
         let fold = String::from_utf8_lossy(&upld_path.as_bytes()[..upld_path.len() - (file_name.len() + 1)]);
         names.push(FileNames{
+            id: 0,
             datapath: entry.path().display().to_string().replace("\\", "/"),
             dataname: file_name.clone(),
             uploadspath: upld_path.to_string(),
@@ -933,7 +959,7 @@ pub fn sorting(how: u8, user: String) -> Result<Vec<FileNames>, String> {
 
     }
 
-    let sorted = match how {
+    let mut sorted = match how {
         0 => { //alphabetical order
             let sorted_folders = sort_fn(folders.clone());
             let sorted_files = sort_fn(names.clone());
@@ -1016,6 +1042,9 @@ pub fn sorting(how: u8, user: String) -> Result<Vec<FileNames>, String> {
         }   
     };
     
+    for i in 0..sorted.len() { // i could make this instead to use the index to use teh uuid that it got 
+        sorted[i].id = i as i64;
+    }
 
     // println!("\n\nsorted upload time: {:?}", sorted); //could do better???
 
@@ -1030,6 +1059,7 @@ fn sort_fn(list: Vec<FileNames>) -> Vec<FileNames> {
 
     for i in 0..list.len() {
         lower_list.push(FileNames{
+            id: list[i].id,
             datapath: list[i].datapath.clone(),
             dataname: list[i].dataname.clone(),
             uploadspath: list[i].uploadspath.clone(),
@@ -1225,6 +1255,10 @@ fn sort_fn_date(list: Vec<FileNames>) -> Vec<FileNames> {
 
     sorted
 }
+
+// fn sort_fn_size(list: Vec<FileNames>) -> Vec<FileNames> {
+
+// }
 
 fn get_data_info(data:Vec<u8>) -> Result<(String, String, String, String), String> {
         let end = match memmem::find(&data[..], b";").map(|p| p as usize) {

@@ -93,7 +93,7 @@
         <p>Welcome to your file server :) &#10003; </p>
 
         <form action=\"/\" method=\"POST\" enctype=\"multipart/form-data\">
-            <input type=\"file\" name=\"file\"  required>
+            <input type=\"file\" name=\"file\" required>
             <button type=\"submit\">Upload</button>
         </form> 
 

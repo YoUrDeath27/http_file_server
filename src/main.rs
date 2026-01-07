@@ -75,7 +75,10 @@ use security::*;
 /*
 *****************************************************************************************************
     MENTIONS
-    -cand log da fail creeaza un alt log (good idea?)
+    -0 -> 100 (sau mai mult ig) 
+    sa fie problems in memmem si gen fiecare cod sa fie cv diferit care notezi aici
+
+    100 - 200 idk, just find some other problems to use these codes for
 
 
 *****************************************************************************************************
@@ -197,6 +200,7 @@ fn main() {
             },
             Err(e) => println!("Failed to connect {}", e  )
         }
+        println!("idk, just testing ig");
     }
 }
 #[derive(Clone, Debug)]
@@ -232,6 +236,7 @@ fn handle_connection(mut stream: TcpStream) {
         }
 
         if bytes_read == 0 {
+            println!("wasn't able to read anything");
             break;
         }
         
@@ -291,12 +296,12 @@ fn handle_connection(mut stream: TcpStream) {
         // println!("Finished the request: {:?}", String::from_utf8_lossy(&received_data[..]));
 
 
-            match log(&*String::from_utf8_lossy(&received_data[..]), 0){
-                Ok(x) => x,
-                Err(e) => {
-                    send_error_response(&mut stream, 400, &e);   
-                } 
-            }
+            // match log(&*String::from_utf8_lossy(&received_data[..]), 0){
+            //     Ok(x) => x,
+            //     Err(e) => {
+            //         send_error_response(&mut stream, 400, &e);   
+            //     } 
+            // }
     
            
             match decode_and_check_path(request.clone()) {
