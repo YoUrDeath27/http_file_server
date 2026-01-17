@@ -35,11 +35,6 @@ pub fn upload_file(mut stream: TcpStream, buffer: Request) {
         return;
     }
 
-    if let Some(_) = memmem::find(&buffer.body.clone().unwrap()[..], b"name=\"folder\"").map(|p| p as usize) {
-        add_file_in_folder(stream, buffer, &content, &content_type, filename, length);
-        return;
-    }
-
     add_file(stream, buffer, &content, &content_type, filename, length);
     return;
 }
@@ -916,57 +911,57 @@ pub fn add_folder(mut stream: TcpStream, buffer: Request, filename: String) {
     
 }
 
-fn add_file_in_folder( //tehnic nici macar nu ai nevoie de this shit
-    mut stream: TcpStream,
-    buffer: Request,
-    content: &[u8],
-    content_type: &str,
-    filename: String,
-    length: i64,
-) {
-    let folder = match memmem::find(&buffer.body.clone().unwrap()[..], b"name=\"folder\"").map(|p| p as usize) {
-        Some(f) => f,
-        None => {
-            match log("The folder that was supposed to be put the file in did not get identified", 3){
-                Ok(x) => x,
-                Err(e) => {
-                    send_error_response(&mut stream, 400, &e);   
-                } 
-            }
-            send_error_response(&mut stream, 404, "Folder not found");
-            return;
-        }
-    };
+// fn add_file_in_folder( //tehnic nici macar nu ai nevoie de this shit
+//     mut stream: TcpStream,
+//     buffer: Request,
+//     content: &[u8],
+//     content_type: &str,
+//     filename: String,
+//     length: i64,
+// ) {
+//     let folder = match memmem::find(&buffer.body.clone().unwrap()[..], b"name=\"folder\"").map(|p| p as usize) {
+//         Some(f) => f,
+//         None => {
+//             match log("The folder that was supposed to be put the file in did not get identified", 3){
+//                 Ok(x) => x,
+//                 Err(e) => {
+//                     send_error_response(&mut stream, 400, &e);   
+//                 } 
+//             }
+//             send_error_response(&mut stream, 404, "Folder not found");
+//             return;
+//         }
+//     };
 
-    // println!("should add a file in da folder");
-    let folder = &buffer.body.clone().unwrap()[folder + "name=\"folder\"".len() + "\r\n\r\n".len()..];
+//     // println!("should add a file in da folder");
+//     let folder = &buffer.body.clone().unwrap()[folder + "name=\"folder\"".len() + "\r\n\r\n".len()..];
 
-    // println!("folder? = {}", String::from_utf8_lossy(&folder[..]));
-    let end = match memmem::find(folder, b"\r\n").map(|p| p as usize){
-        Some(x) => x,
-        None => {
-            println!("this shit probly got corrupted");
-            match log("The request probably got corrupted", 2){
-                Ok(x) => x,
-                Err(e) => {
-                    send_error_response(&mut stream, 400, &e);   
-                } 
-            }
-            send_error_response(&mut stream, 400, "YOur request oribably got corrupted");
-            return;
+//     // println!("folder? = {}", String::from_utf8_lossy(&folder[..]));
+//     let end = match memmem::find(folder, b"\r\n").map(|p| p as usize){
+//         Some(x) => x,
+//         None => {
+//             println!("this shit probly got corrupted");
+//             match log("The request probably got corrupted", 2){
+//                 Ok(x) => x,
+//                 Err(e) => {
+//                     send_error_response(&mut stream, 400, &e);   
+//                 } 
+//             }
+//             send_error_response(&mut stream, 400, "YOur request oribably got corrupted");
+//             return;
             
-        }
-    };
-    let folder = &folder[..end];
+//         }
+//     };
+//     let folder = &folder[..end];
 
-    // println!("filename before change = {}", filename);
+//     // println!("filename before change = {}", filename);
 
-    let filename = format!("{}/{}", String::from_utf8_lossy(&folder[..]), filename);
+//     let filename = format!("{}/{}", String::from_utf8_lossy(&folder[..]), filename);
 
-    // println!("filename after change = {}", filename);
+//     // println!("filename after change = {}", filename);
 
-    add_file(stream, buffer, content, content_type, filename, length);
-}
+//     add_file(stream, buffer, content, content_type, filename, length);
+// }
 
 fn add_file(
     mut stream: TcpStream,
