@@ -8,7 +8,7 @@ lazy_static!{
             .write(true)
             .append(true)
             .create(true)
-            .open(format!("logs/{}.txt", 
+            .open(format!("/logs/{}.txt", 
             match get_date() {
                 Ok(x) => x,
                 Err(e) => {
@@ -17,7 +17,7 @@ lazy_static!{
                 }   
             })) {
             Ok(mut x) => {
-                match x.write(format!("[{}]*******************************NEW LOG CREATED*******************************", 
+                match x.write(format!("\n[{}]*******************************NEW LOG CREATED*******************************", 
                     match get_time() {
                         Ok(x) => x,
                         Err(e) => {
@@ -35,7 +35,7 @@ lazy_static!{
                 x
             },
             Err(e) => {
-                println!("Probably because the file doesnt exist {}", e);
+                println!("Probably because the file doesnt exist\n {}", e);
                 match create_log() {
                     Ok(x) => x,
                     Err(e) => {
@@ -64,28 +64,44 @@ lazy_static!{
                 }
             ));
             let file_s = format!("{:?}", file.unwrap()).replace("\\\\", "/");
-            // println!("file ig = {:?};", file_s);
-            // println!("file in byes ig = {:?}", fileS.as_bytes());
-            let path = match memmem::find(&file_s.as_bytes()[..], b"/?/").map(|p| p as usize) {
-                Some(x) => x,
-                None => {
-                    println!("Oh well, would u look at that, my way doesnt work");
-                    panic!("The File cannot be transfered the way i thought");
-                }
-        };
+            println!("file ig = {};", file_s);
 
-            let path = &file_s.as_bytes()[path + "/?/".len()..];
-            let end = match memmem::rfind(&path[..], b"\"").map(|p| p as usize) {
-                Some(x) => x,
-                None => {
-                    println!("If the previous one didnt fail then im surprised");
-                    panic!("This shit is so fucked up mate");
-                }
-            };
-            let path = &path[..end];
-            // println!("path hopefully: {}", String::from_utf8_lossy(&path[..]));
+            if let Some(p) = memmem::find(&file_s.as_bytes()[..], b"/?/").map(|p| p as usize) {
+                let path = &file_s.as_bytes()[p + "/?/".len() ..];
+
+                let end = match memmem::rfind(&path[..], b"\"").map(|p| p as usize) {
+                    Some(x) => x,
+                    None => {
+                        println!("If the previous one didnt fail then im surprised");
+                        panic!("This shit is so fucked up mate");
+                    }
+                };
+                let path = &path[..end];
+                // println!("path hopefully: {}", String::from_utf8_lossy(&path[..]));
+                
+                String::from_utf8_lossy(&path[..]).to_string() 
+            } else {
+                let path = match memmem::find(&file_s.as_bytes()[..], b"path: \"/").map(|p| p as usize){
+                    Some(x) => x,
+                    None => {
+                        println!("Linux is fucking me tonight");
+                        panic!("Linux is killing me");
+                    }
+                };
+                let path = &file_s.as_bytes()[path + "path: \"/".len()..];
+
+                let end = match memmem::rfind(&path[..], b"\"").map(|p| p as usize) {
+                    Some(x) => x,
+                    None => {
+                        println!("If the previous one didnt fail then im surprised");
+                        panic!("This shit is so fucked up mate");
+                    }
+                };
+                let path = &path[..end];
+                // println!("path hopefully: {}", String::from_utf8_lossy(&path[..]));
+                String::from_utf8_lossy(&path[..]).to_string() 
+            }
             
-            String::from_utf8_lossy(&path[..]).to_string() 
         })
     };
 
@@ -231,42 +247,71 @@ pub fn logging(message: &str, variant: i8) -> Result<(), String> { //i dont wnat
         Ok(mut x) => {
             //check log location here
             let log_path = format!("{:?}", x).replace("\\\\", "/");
-            // println!("{:?}", log_path);
-            let p = match memmem::find(&log_path.as_bytes()[..], b"//?/").map(|p| p as usize) {
-                Some(x) => x,
-                None => {
-                    println!("oh well you are cooked");
-                    // return Err(String::from("sigma is not doign great"));
-                    panic!("There was a problem with the file path");
-                }
-            };
-            let log_path = &log_path.as_bytes()[p + "//?/".len()..];
-            let end = match memmem::rfind(&log_path[..], b"\"").map(|p| p as usize) {
-                Some(x) => x,
-                None => {
-                    println!("oh well you are cooked");
-                    // return Err(String::from("sigma is not doign great pt 2"));
-                    panic!("There was a problem with the file path");
-                }
-            };
+            // println!("log_path: {}", log_path);
+            // log_path: File { fd: 4, path: "/app/logs/2026-03-30.txt", read: false, write: true }
+            if let Some (p) = memmem::find(&log_path.as_bytes()[..], b"//?/").map(|p| p as usize) { //on linux is different
+                let log_path = &log_path.as_bytes()[p + "//?/".len()..];
+                let end = match memmem::rfind(&log_path[..], b"\"").map(|p| p as usize) {
+                    Some(x) => x,
+                    None => {
+                        println!("oh well you are cooked");
+                        // return Err(String::from("sigma is not doign great pt 2"));
+                        panic!("There was a problem with the file path");
+                    }
+                };
 
-            let log_path = String::from_utf8_lossy(&log_path[..end]);
-            match check_log_location(&log_path) {
-                Ok(x) => x,
-                Err(e) => {
-                    return Err(String::from(format!("{}", e)));   
+                let log_path = String::from_utf8_lossy(&log_path[..end]);
+                match check_log_location(&log_path) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        return Err(String::from(format!("{}", e)));   
+                    }
                 }
+                
+                match x.write(phrase.as_bytes()){
+                    Ok(t) => t,
+                    Err(e) => {
+                        println!("it happenes again\n {}", e);
+                        // panic!("error encountered: {}", e);
+                        return Err(String::from("You are cooked"));
+                    }
+                };
+            } else {
+                let p = match memmem::find(&log_path.as_bytes()[..], b"path: \"/").map(|p| p as usize) {
+                    Some(x) => x,
+                    None => {
+                        println!("Is it linux or some shit?");
+                        panic!("Linux is doing some shit");
+                    }
+                };
+
+                let log_path = &log_path.as_bytes()[p + "path: \"/".len()..];
+                let end = match memmem::rfind(&log_path[..], b"\"").map(|p| p as usize) {
+                    Some(x) => x,
+                    None => {
+                        println!("oh well you are cooked");
+                        // return Err(String::from("sigma is not doign great pt 2"));
+                        panic!("There was a problem with the file path");
+                    }
+                };
+
+                let log_path = String::from_utf8_lossy(&log_path[..end]);
+                match check_log_location(&log_path) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        return Err(String::from(format!("{}", e)));   
+                    }
+                }
+                
+                match x.write(phrase.as_bytes()){
+                    Ok(t) => t,
+                    Err(e) => {
+                        println!("it happenes again\n {}", e);
+                        // panic!("error encountered: {}", e);
+                        return Err(String::from("You are cooked"));
+                    }
+                };
             }
-
-            
-            match x.write(phrase.as_bytes()){
-                Ok(t) => t,
-                Err(e) => {
-                    println!("it happenes again\n {}", e);
-                    // panic!("error encountered: {}", e);
-                    return Err(String::from("You are cooked"));
-                }
-            };
             x
         },
         Err(e) => {
@@ -326,6 +371,9 @@ pub fn get_date() -> Result<String, String> {
 pub fn get_time() -> Result<String, String> {
     let datetime: DateTime<Local> = Local::now();
     let placeholder = format!("{}", datetime).into_bytes();
+
+    // println!("time ig: {:?}", placeholder);
+    // println!("just checking: {}", String::from_utf8_lossy(&placeholder[..]));
 
     let date = match memmem::find(&placeholder[..], &[0x20] ).map(|p| p as usize){
         Some(x) => x,
@@ -537,6 +585,8 @@ pub fn parse_file<'a>(
         }
     };
     let length = String::from_utf8_lossy(&length[..end]).parse::<i64>().unwrap();
+
+    let _ = log(&format!("body of the upload request: {}\nLenght of the whole body request:{}", String::from_utf8_lossy(&buffer.body.clone().unwrap()[..]), buffer.body.clone().unwrap().len()), 0).unwrap();
 
     //3
     // println!("Parse Upload filename = {:?}", String::from_utf8_lossy(&filename_data[..]));
@@ -786,8 +836,8 @@ impl FileNames {
     */
 }
 
-pub fn sorting(how: u8, user: String) -> Result<Vec<FileNames>, String> {
-    let data = match fs::read_dir(format!("data/{}", user)){
+pub fn sorting(how: u8, user: String, folder: String) -> Result<Vec<FileNames>, String> {
+    let data = match fs::read_dir(format!("users/{}/data/{}", user, folder)){
         Ok(x) => x,
         Err(e) => {
             println!("Unnable to read the folder\n{}", e);
@@ -801,7 +851,7 @@ pub fn sorting(how: u8, user: String) -> Result<Vec<FileNames>, String> {
         }
     };
 
-    let uploads = match fs::read_dir(format!("uploads/{}", user)){
+    let uploads = match fs::read_dir(format!("users/{}/uploads/{}", user, folder)){
         Ok(x) => x,
         Err(e) => {
             println!("Unnable to read the folder\n{}", e);
@@ -821,7 +871,6 @@ pub fn sorting(how: u8, user: String) -> Result<Vec<FileNames>, String> {
     let mut i = 0;
     for entry in data {
         let entry = match entry{
-            
             Ok(x) => x,
             Err(e) => {
                 println!("No users data found\n{:?}", e);
@@ -855,14 +904,35 @@ pub fn sorting(how: u8, user: String) -> Result<Vec<FileNames>, String> {
 
         println!("name: {:?}", file_name);
 
+        // let txt = match memmem::rfind(&file_name.as_bytes(), b".txt").map(|p| p as usize){
+        //     Some(x) => x,
+        //     None => {
+        //         println!("There has been a problem with the file that was tried to be sorted");
+        //         match log(&format!("Error finding the data folder extension of the file for {}", file_name), 1){
+        //             Ok(x) => x,
+        //             Err(_e) => {
+        //                 println!("There has been an error logging");
+        //                 return Err(String::from(""));
+        //             }
+        //         }
+        //         return Err(String::from(""));
+        //     }
+        // };
+
+        // let upld_file_name = &file_name.as_bytes()[..txt];
+        // println!("Upld filename hopefully: {}", String::from_utf8_lossy(&upld_file_name[..]));
+
         //if able to open file then search to get the file name
 
-        let mut upld_path = String::from(&format!("uploads/{}/{}", user, file_name)); //for folders
-        let data = match fs::read(format!("data/{}/{}", user, file_name)){
+        let mut upld_path = String::from(&format!("users/{}/uploads{}/{}", user, folder, file_name)); //for folders
+        let data = match fs::read(format!("users/{}/data{}/{}", user, folder, file_name)){
             Ok(x) => x,
             Err(e) => {
+
                 println!("The user's data file cannot be read\n{:?}", e);
-                match log(&format!("The user's data file cannot be read\n{:?}", e), 3){
+                println!("users/{}/data/{}", user, file_name);
+
+                match log(&format!("The user's data file cannot be read\n{:?}\n{}", e , format!("users/{}/data{}/{}", user, folder, file_name)), 3){
                     Ok(x) => x,
                     Err(_e) => {
                         // send_error_response(&mut stream, 400, &e);   
@@ -909,7 +979,7 @@ pub fn sorting(how: u8, user: String) -> Result<Vec<FileNames>, String> {
         };
         
         let upld_name = String::from_utf8_lossy(&file_name.as_bytes()[..end]);
-        upld_path = String::from(&format!("uploads/{}/{}", user, upld_name));
+        upld_path = String::from(&format!("users/{}/uploads{}/{}", user, folder, upld_name));
         println!("attempted upload path: {}", upld_path);
 
 
@@ -979,7 +1049,8 @@ pub fn sorting(how: u8, user: String) -> Result<Vec<FileNames>, String> {
             let sorted_folders = sort_fn(folders.clone());
             let sorted_files = sort_fn_date(names.clone());
 
-            println!("\n\nnames: {:?}", names);
+            println!("\n\nnames: {:?}", sorted_files);
+            println!("\n\nfolders: {:#?}", sorted_folders);
             let mut sorted1 = Vec::new();
             
             for i in (0..sorted_files.len()).rev(){
@@ -998,11 +1069,11 @@ pub fn sorting(how: u8, user: String) -> Result<Vec<FileNames>, String> {
 
             let mut sorted1 = Vec::new();
             
-            for i in (0..sorted_folders.len()).rev(){
-                sorted1.push(sorted_folders[i].clone());
-            } 
-            for i in sorted_files{
+            for i in sorted_folders{
                 sorted1.push(i);
+            } 
+            for i in (0..sorted_files.len()).rev(){
+                sorted1.push(sorted_files[i].clone());
             }
             sorted1
         },
@@ -1434,7 +1505,7 @@ pub fn get_path_fron_direntry(dir: PathBuf) -> Result<PathBuf, String> {
     Ok(PathBuf::from(path))
 }
 
-pub fn give_files(mut stream: TcpStream, buffer: Request){
+pub fn give_files(mut stream: TcpStream, buffer: Request){  
     //{"order":"0"}
 
     let order = match memmem::find(&buffer.body.clone().unwrap(), b"{\"order\":\"").map(|p| p as usize) {
@@ -1447,7 +1518,7 @@ pub fn give_files(mut stream: TcpStream, buffer: Request){
     };
 
     let order = &buffer.body.clone().unwrap()[order + "{\"order\":\"".len()..buffer.body.clone().unwrap().len() - 2];
-    println!("order :{}", String::from_utf8_lossy(&order[..]));
+    // println!("order :{}", String::from_utf8_lossy(&order[..]));
 
     let order = String::from_utf8_lossy(&order[..]).parse::<u8>().unwrap();
     println!("order :{}", order);
@@ -1462,9 +1533,9 @@ pub fn give_files(mut stream: TcpStream, buffer: Request){
         send_error_response(&mut stream, 404, "There was a problem getting the auth key");
         return;
     }
-    let path = format!("{}/{}", user, folder);  
+    // let path = format!("{}/{}", user, folder);  
 
-    let sorted =match sorting(order, path){
+    let sorted =match sorting(order, user, folder){
             Ok(x) => x,
             Err(e) => {
                 send_error_response(&mut stream, 400, &format!("There was an error sorting the files {}", e));
@@ -1547,6 +1618,25 @@ let body = buffer.header;
 
     return String::from_utf8_lossy(&body[..end]).to_string();
 }
+
+pub fn pfp_operations(pfp_location: String) -> Result<(), String> {
+    let img = match ImageReader::open(pfp_location) {
+        Ok(x) => x,
+        Err(e) => {
+            println!("Error: {}", e);
+            return Err(String::from("There has been an error"));
+        }
+    };
+    let img = match img.decode() {
+        Ok(x) => x,
+        Err(e) => {
+            println!("Error: {}", e);
+            return Err(String::from("There has been an error"));
+        }
+    };
+    return Ok(());
+}
+
 //more to come
 pub const MAX_UPLOAD_SIZE: usize = 100 * 1024 * 1024; // 100MB
 

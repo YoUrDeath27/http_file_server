@@ -1,6 +1,6 @@
 use super::*;
 
-pub fn path_traversal_check(path: &str) -> bool {
+pub fn path_traversal_check(path: &str) -> bool { 
     if path.contains("../") || path.contains("..\\") || path.contains("..") || path.contains("%"){
         return true;
     }

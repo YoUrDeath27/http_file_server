@@ -1,6 +1,9 @@
 use super::*; 
 
-pub fn web_send_image(mut stream:TcpStream, buffer: Request){
+pub fn web_send_image(mut stream:TcpStream, buffer: Request){ 
+
+    let user = checkAuth(&mut stream, buffer.clone());
+    let folder = checkFolder(&mut stream, buffer.clone());
 
     let file = match memmem::find(&buffer.header[..], b" HTTP/1.1").map(|p| p as usize){
         Some(x) => x,
@@ -18,7 +21,7 @@ pub fn web_send_image(mut stream:TcpStream, buffer: Request){
         }
     }; 
 
-    let start = match memmem::find(&buffer.header[..], b"uploads").map(|p| p as usize){
+    let start = match memmem::find(&buffer.header[..], b"users").map(|p| p as usize){
         Some(x) => x,
         None => {
             println!("Probably the request got corrupted bitch");
@@ -34,6 +37,8 @@ pub fn web_send_image(mut stream:TcpStream, buffer: Request){
         }
     };
     let name = String::from_utf8_lossy(&buffer.header[start..file]);
+    println!("name: {:?}", name);
+
     let mut file = match fs::File::open(&*name){
         Ok(x) => x,
         Err(e) => {
@@ -53,11 +58,11 @@ pub fn web_send_image(mut stream:TcpStream, buffer: Request){
     };
 
     let mut data = String::from(name.clone());
-    data.replace_range(.."uploads".len(), "data");
+    data.replace_range(..&format!("users/{}/uploads", user).len(), &format!("users/{}/data", user));
     data.replace_range(data.len().., ".txt"); //add at the end .txt
 
-    // println!("image data: {}", data);
-    let mut data = match fs::File::open(data) { //why errorr??????????????????????//
+    println!("image data: {:?}", data);
+    let mut data = match fs::File::open(&*data) { //why errorr??????????????????????//
         Ok(x) => x,
         Err(e) => {
             println!("The data image file does not exist {}", e);
@@ -90,8 +95,8 @@ pub fn web_send_image(mut stream:TcpStream, buffer: Request){
         }
     };
     let filename = &buffer1[filename..];
-    let mut content_type = String::new();
-    match data.read_to_string(&mut content_type) {
+    let mut file_data = String::new();
+    match data.read_to_string(&mut file_data) {
         Ok(x) => x,
         Err(e) => {
             match log(&format!("{}", e), 3) {
@@ -122,17 +127,25 @@ pub fn web_send_image(mut stream:TcpStream, buffer: Request){
         }
     };  
 
+    /*
+    *********************************************************************************************
+        This response needs to be re-worked 
+    *********************************************************************************************
+    */
     let status_line = "HTTP/1.1 200 OK\r\n";
-    let response = format!(
-        "{}{}\r\nContent-DIsposition: W; filename = \"{}\"\r\nContent-Length: {}\r\n\r\n",
+    let response = format!( 
+        "{}{}\r\nContent-Disposition: W;\r\nfilename = \"{}\"\r\n\r\n",
         status_line,
-        content_type,
+        file_data,
         String::from_utf8_lossy(&filename[..]),
-        read.len()
     );
 
+    println!("\n\n\nresponse: {}", response);
+
+    println!("CWD: {:?}", std::env::current_dir());
+
     // println!("If this shit doesnt work imma tweak out");
-   if let Err(e) = stream.write_all(response.as_bytes()) {
+    if let Err(e) = stream.write_all(response.as_bytes()) {
         eprintln!("Write error: {}", e);
         match log(&format!("Write error: {}", e), 3){
             Ok(x) => x,

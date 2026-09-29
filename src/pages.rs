@@ -2,8 +2,10 @@
 
     pub fn web(stream: &mut TcpStream, buffer: Request) -> String {
 
-        let mut html = String::from(
-            "    
+        let user = checkAuth(stream, buffer.clone());
+
+        let mut html = String::from(format!(
+            r#"    
         <!DOCTYPE html>
         <html lang=\"en\">
         <head>
@@ -12,7 +14,14 @@
         </head>
 
         <style>
-            li{
+
+            html {{
+                color-scheme: dark;
+            }}
+            body{{
+                color : #d1cfccfc;
+            }}
+            li{{
                 display: flex;
                 margin: auto;
                 height: 100px;
@@ -20,56 +29,56 @@
                 justify-content: center;
                 align-items: center;
                 font-size: 30px;
-            }
+            }}
 
-            li > form {
+            li > form {{
                 margin: 0;
-            }
+            }}
 
-            ul > li > div:nth-child(1){
+            ul > li > div:nth-child(1){{
                 margin: 0;
-            }
+            }}
 
-            li > form > button{
+            li > form > button{{
                 margin: 0 10px;
                 font-size: 25px;
-            }
+            }}
 
-            li > button {
+            li > button {{
                 font-size: 25px;
-            }
+            }}
 
-            li > div:nth-child(2) {
+            li > div:nth-child(2) {{
                 margin:0 0 0 50px;
-            }
+            }}
 
-            .options_file, .options_folder {
+            .options_file, .options_folder {{
                 background: none;
                 border: none;
-                font-size: 10rem;
+                font-size: 7rem;
                 position: relative;
-            }
+            }}
 
-            #options {
-                background-color: lightgrey;
+            #options {{
+                background-color: #2c3032;
                 border-radius: 10px;
                 padding: 20px;
-            }
+            }}
 
-            .options::nth-child(1) {
+            .options::nth-child(1) {{
                 display: flex;
-            }
+            }}
 
-            .options_file:hover, .options_folder:hover {
+            .options_file:hover, .options_folder:hover {{
                 color: blue;
                 cursor: pointer;
-            }
-            .loader-container {
+            }}
+            .loader-container {{
                 text-align: center;
                 padding: 20px;
-            }
+            }}
 
-            .spinner {
+            .spinner {{
                 border: 8px solid rgba(0, 0, 0, 0.1);
                 width: 72px;
                 height: 72px;
@@ -77,35 +86,72 @@
                 border-left-color: #09f;
                 animation: spin 1s ease infinite;
                 display: inline-block;
-            }
+            }}
 
-            @keyframes spin {
-                0% { transform: rotate(0deg); }
-                20% {transform: rotate(50deg); }
-                60% {transform: rotate(200deg); }
-                100% { transform: rotate(360deg); }
-            }
+            @keyframes spin {{
+                0% {{ transform: rotate(0deg); }}
+                20% {{transform: rotate(50deg); }}
+                60% {{transform: rotate(200deg); }}
+                100% {{ transform: rotate(360deg); }}
+            }}
 
+            #banner {{
+                display: flex;
+                justify-content: flex-start;
+                align-items: center;
+                background: rgb(49 53 57 / 33%);
+                height: 50px;
+                border-radius: 10px;
+                position: sticky;
+                top: 10px;
+                margin: 0 0 11px 0;
+            }}
+
+            #banner * {{
+                margin: 0 10px;
+            }}
+            #banner > *:nth-child(2) {{ //idk why this works but #banner:nth-child(2) doesnt
+                margin: 0 10px 0 40px;
+            }}
+            #logout{{
+                height: 30px;0
+                margin: 0 10px;
+                border-radius: 10px;
+                border-style: none;
+            }}
+            #LogOut {{
+                margin: 0 10px;
+            }}
+            
         </style>
 
         <body>
-        <h1>Hello!</h1>
-        <p>Welcome to your file server :) &#10003; </p>
+        <div id = "banner">
+            <form id = "LogOut" action="/" method="POST">
+                <input type="hidden" name="**logout" value="_">
+                <button id="logout" type="submit"> LogOut </button>
+            </form>
+            <h1>Hello!</h1>
+            <p>Welcome to your file server :) &#10003; </p>
 
-        <form action=\"/\" method=\"POST\" enctype=\"multipart/form-data\">
-            <input type=\"file\" name=\"file\" required>
-            <button type=\"submit\">Upload</button>
+            <img src="users/{}/pfp.jpg" alt="profile picture`">
+        </div>
+        
+
+        <form action="/" method="POST" enctype="multipart/form-data">
+            <input type="file" name="file" required>
+            <button type="submit">Upload</button>
         </form> 
 
-        <form action=\"/\" method=\"POST\">
-            <input type=\"hidden\" name=\"**action\" value=\"ADD_FOLDER\">
-            <input type=\"text\" name=\"filename\" required>
-            <button type=\"submit\">Add Folder </button>
+        <form action="/" method="POST">
+            <input type="hidden" name="**action" value="ADD_FOLDER">
+            <input type="text" name="filename" required>
+            <button type="submit">Add Folder </button>
         </form> 
         <span id='breadcrumb'>
         </span>
-        "
-        );
+        "#
+        , user) );
         /*
         //need to make the breadcrum on js too...
         let user = checkAuth(stream, buffer.clone());
@@ -150,7 +196,7 @@
         } */
         
         html.push_str(r#"
-            <h3> File ordering </h3>
+            <h3> File ordering:</h3>
             <select id="ordering" onChange="changed(this)">
                 <option value="0">A-Z</option>
                 <option value="1">New to Old</option>
@@ -172,7 +218,9 @@
 
             function open_file_options(file){
                 console.log(file);
+                console.log('file');
                 console.log(file.id);
+                console.log(document.querySelectorAll('.options'));
                 if (document.getElementById(file.id).parentElement.children[3].style.display  == \"none\") {
                     let button = document.getElementById(file.id);
                     button.parentElement.children[3].style.display = 'flex';
@@ -187,6 +235,8 @@
             }
             function open_folder_options(folder){
                 console.log(folder);
+                console.log('folder');
+                console.log(document.querySelectorAll('.options'));
                 let button = document.getElementById(folder.id);
                 if(button.parentElement.children[3].style.display == 'none') {
                     button.parentElement.children[3].style.display = 'flex';
@@ -224,8 +274,6 @@
                 console.log("did it return???");
                 let folder = str.slice(first + 15, end);
                 console.log("folder" + folder);
-
-
                 
                 if (folder !== "") {{
                     
@@ -248,7 +296,7 @@
                         Location: ${folder}
                         <br>
                         
-                        <form actionn="/" method=\"POST\">
+                        <form action="/" method=\"POST\">
                             <input type=\"hidden\" name="**action" value="**open_folder..">
                             <input type=\"hidden\" name="filename" value="/">
                             <button type=\"submit\">Go back 1 layer back</button>
@@ -307,7 +355,7 @@
                 if (list.length == 0) {{
                     filesWindow.innerHTML = `<h2> Let's start uploading some files :3 </h2>`
                 }} else {{
-                    filesWindow.innerHTML = list.map(file=> {{
+                    filesWindow.innerHTML = list.map(file => {{
                         console.log(file);
                         if (file.is_file == true) {{
                             if (file.file_type == "image") {{
@@ -320,7 +368,7 @@
                                     <button class=\"options_file\" id=\"${file.id}\" onclick=\"open_file_options(this)\"> 
                                         <span> &#8942; </span>
                                     </button>
-                                    <div id=\"options\" style=\"display:none; z-index: 10\">
+                                    <div class=\"options\" style=\"display:none; z-index: 10\">
                                         <div style=\"margin:0 10px 0 0;\">
                                             <form action=\"/\" method =\"POST\">
                                                 <input type=\"hidden\" name=\"**action\" value=\"DELETE\">
@@ -346,7 +394,7 @@
                                     <button class=\"options_file\" id=\"${file.id}\" onclick=\"open_file_options(this)\"> 
                                         <span> &#8942; </span>
                                     </button>
-                                    <div id=\"options\" style=\"display:none; z-index: 10\">
+                                    <div class=\"options\" style=\"display:none; z-index: 10\">
                                         <div style=\"margin:0 10px 0 0;\">
                                             <form action=\"/\" method =\"POST\">
                                                 <input type=\"hidden\" name=\"**action\" value=\"DELETE\">
@@ -376,7 +424,7 @@
                                     <button class=\"options_file\" id=\"${file.id}\" onclick=\"open_file_options(this)\"> 
                                         <span> &#8942; </span>
                                     </button>
-                                    <div id=\"options\" style=\"display:none; z-index: 10\">
+                                    <divclass=\"options\" style=\"display:none; z-index: 10\">
                                         <div style=\"margin:0 10px 0 0;\">
                                             <form action=\"/\" method =\"POST\">
                                                 <input type=\"hidden\" name=\"**action\" value=\"DELETE\">
@@ -403,7 +451,7 @@
                                 <button class="options_folder" id="${file.id}" onclick="open_folder_options(this)"> 
                                     <span> &#8942; </span>
                                 </button>
-                                <div id="options" style="display: none; z-index: 10">
+                                <div class="options" style="display: none; z-index: 10">
                                     <div style="display: block;  margin:0 10px 0 0;">
                                         <form action="/" method ="POST">
                                             <input type= "hidden" name= "**action" value= "DELETE">
@@ -413,17 +461,17 @@
                                         </form>
                                         <form action="/" method ="POST">
                                             <input type= "hidden" name= "**action" value= "RENAME_FOLDER">
-                                            <input type= "hidden" name= "filename" value= "${file.folder}">
+                                            <input type= "hidden" name= "filename" value= "${file.uploadsname}">
                                             <input type= "text\" name= "newFile">
                                             <button type= "submit">Rename</button>
                                         </form>
                                         <form action="/" method="POST">
                                             <input type= "hidden" name= "**action" value= "DOWNLOAD_FOLDER">
-                                            <input type= "hidden" name= "filename" value= "${file.datapath}">
+                                            <input type= "hidden" name= "filename" value= "${file.uploadsname}">
                                             <button type= "submit">Download as ZIP</button>
                                         </form>
                                     </div>
-                                    <form actionn="/" method= "POST">
+                                    <form action="/" method= "POST">
                                         <input type= "hidden" name= "**action" value= "OPEN_FOLDER">
                                         <input type= "hidden" name= "filename" value= "${file.realname}">
                                         <button type= "submit">Open Folder</button>
@@ -444,6 +492,7 @@
 
         return html;
     }
+
 
     pub fn send_error_response(stream: &mut TcpStream, code: u16, message: &str) {
         let status_line = match code {
@@ -491,6 +540,12 @@
         </head>
         <style>
 
+            html {
+                color-scheme: dark;
+            }
+            body{
+                color : #d1cfccfc;
+            }
             button {
                 display: flex;
                 margin: auto;
@@ -523,6 +578,15 @@
             <head>
             <title> Login / Signup bro </title>
             </head>
+
+            <style>
+                html {
+                    color-scheme: dark;
+                }
+                body{
+                    color : #d1cfccfc;
+                }
+            </style>
             <body>
                 <h1> Welcome to your File Manager Server </h1>
 
@@ -546,6 +610,14 @@
             <head>
             <title> Login / Signup bro </title>
             </head>
+            <style>
+                html {{
+                    color-scheme: dark;
+                }}
+                body{{
+                    color : #d1cfccfc;
+                }}
+            </style>
             <body>
                 <h1> Welcome to your File Manager Server </h1>
 
@@ -553,7 +625,7 @@
 
                 <h4> Password: </h4>
             <form action=\"/\" method=\"POST\">
-                <input type=\"hidden\" name=\"**user\" value=\"{}\">
+                <input type=\"hidden\" name=\"**account\" value=\"{}\">
                 <input type=\"text\" name=\"**password\">
                 <button type=\"submit\"> Login/Signup </button>
             </form>
@@ -567,6 +639,61 @@
         if let Some(info) = extra_info{
             html.push_str(info);
         }
+        html.push_str("
+            </body>
+            </html>
+        ");
+        html
+    }
+
+    pub fn new_user(name: String ) -> String{
+
+        let mut html = String::from(format!("
+            <!DOCTYPE html>
+            <html>
+            <head>
+            <title> Set up ur account</title>
+            </head>
+            <style>
+                html {{
+                    color-scheme: dark;
+                }}
+                body{{
+                    color : #d1cfccfc;
+                }}
+            </style>
+            <body>
+                <h1> Welcome to your File Manager Server </h1>
+
+                <h3> Enter some info for your account <h3>
+
+                <form action=\"/\" method=\"POST\" enctype=\"multipart/form-data\">
+
+                    <input type=\"hidden\" name=\"**account\" value=\"{}\">
+
+                    <h4> Password: </h4>
+                    <input type=\"text\" name=\"**password\" required>
+                    
+                    <p> Choose your gender </p> 
+                    <select id=\"gender\" name=\"gender\">
+                        <option value=\"SMTH\">Walmart Bag</option>
+                        <option value=\"M\">Male</option>
+                        <option value=\"F\">Female</option>
+                    </select>
+
+                    <p> Profile picture (it will be cropped in a 1:1 aspect ratio in the middle so choose wisely)
+                    <input type=\"file\" name=\"file\" required>
+                    
+                    
+                    <button type=\"submit\"> Finish the Sign up </button>
+                </form>
+            <br><br>
+
+            
+        ",
+        name
+        ));
+
         html.push_str("
             </body>
             </html>

@@ -1,6 +1,11 @@
 use super::*;
 
-pub fn upload_file(mut stream: TcpStream, buffer: Request) {
+pub fn upload_file(mut stream: TcpStream, buffer: Request) { 
+
+    if memmem::find(&buffer.body.clone().unwrap()[..], b"**account").is_some(){
+        auth_pass_not_existing(stream, buffer.clone());
+        return;
+    }
 
     let boundary = match get_boundary(&buffer.header[..].to_vec()) {
         Some(b) => b,
@@ -47,26 +52,25 @@ pub fn download_folder(mut stream: TcpStream, buffer: Request, folder_name: Stri
         send_error_response(&mut stream, 404, "There was a problem getting the auth key");
         return;
     }
-    let path = format!("{}/{}", user, folder);
 
-    let zip_path = format!("{}.zip", folder_name);
+    let zip_path = format!("tmp/{}.zip", folder_name);
     let folder_path;
     
     if *folder != *"" {
-        folder_path = format!("uploads/{}/{}", path, folder_name);
+        folder_path = format!("users/{}/uploads/{}/{}", user, folder, folder_name);
     } else {
-        folder_path = format!("uploads/{}", folder_name);
+        folder_path = format!("users/{}/uploads/{}",user, folder_name);
     }
     
     // Create temporary ZIP
     if let Err(e) = zip_folder(Path::new(&folder_path), Path::new(&zip_path)) {
-        match log(&format!("Error generating the ZIP file: {}", e), 3){
+        match log(&format!("ZIP creation failed: {}\n{}\n{}", e, zip_path, folder_path), 3){
             Ok(x) => x,
             Err(e) => {
                 send_error_response(&mut stream, 400, &e);   
             } 
         }
-        send_error_response(&mut stream, 500, &format!("ZIP creation failed: {}", e));
+        send_error_response(&mut stream, 500, &format!("ZIP creation failed: {}\n{}\n{}", e, zip_path, folder_path));
         return;
     }
     // Send ZIP to client
@@ -104,7 +108,7 @@ pub fn download_folder(mut stream: TcpStream, buffer: Request, folder_name: Stri
                 send_error_response(&mut stream, 400, &e);   
             } 
         }
-        eprintln!("Failed to clean up ZIP file: {}", e);
+        eprintln!("Failed to clean up ZIP file: {}\n{}", e, zip_path);
     }
 
     // Prepare response
@@ -146,6 +150,7 @@ fn zip_folder(folder_path: &Path, zip_path: &Path) -> Result<(), Box<dyn std::er
     let options= SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated)
         .unix_permissions(0o644);
+    
 
     let base_path = folder_path.parent().unwrap_or_else(|| Path::new(""));
 
@@ -257,12 +262,13 @@ pub fn rename_folder(mut stream: TcpStream, buffer: Request, old_folder: String,
             send_error_response(&mut stream, 404, "There was a problem getting the auth key");
             return;
         }
-        let path = format!("{}/{}", user, folder);
+        // let path = format!("{}/{}", user, folder);
+
+        println!("users/{}/uploads{}/{}", user, folder, old_folder);
+        println!("users/{}/uploads{}/{}", user, folder, new_folder);
 
         if folder != "" {
-            // println!("before uploads/{}/{}", folder, old_folder);
-            // println!("after uploads/{}/{}", folder, new_folder);
-            match fs::rename(format!("uploads/{}/{}", path, old_folder), format!("uploads/{}/{}", path, new_folder))  {
+            match fs::rename(format!("users/{}/uploads{}/{}", user, folder, old_folder), format!("users/{}/uploads{}/{}", user, folder, new_folder))  {
                 Ok(x) => x,
                 Err(e) => {
                     match log(&format!("{}", e), 3){
@@ -274,11 +280,11 @@ pub fn rename_folder(mut stream: TcpStream, buffer: Request, old_folder: String,
                         }
                     }
 
-                    send_error_response(&mut stream, 400, "Failed to rename the file");
+                    send_error_response(&mut stream, 400, "Failed to rename the file 1 file");
                     return;    
                 }
             };
-            match fs::rename(format!("data/{}/{}", path, old_folder), format!("data/{}/{}", path, new_folder)) {
+            match fs::rename(format!("users/{}/data/{}/{}", user, folder, old_folder), format!("users/{}/data/{}/{}", user, folder,  new_folder)) {
                 Ok(x) => x,
                 Err(e) => {
                     match log(&format!("{}", e), 3){
@@ -290,14 +296,14 @@ pub fn rename_folder(mut stream: TcpStream, buffer: Request, old_folder: String,
                         }
                     }
 
-                    send_error_response(&mut stream, 400, "Failed to rename the file");
+                    send_error_response(&mut stream, 400, "Failed to rename the file 2 files");
                     return;    
                 }
             };
         } else {
             // println!("uploads/{}", old_folder);
             // println!("uploads/{}", new_folder);
-            match fs::rename(format!("uploads/{}/{}", user, old_folder), format!("uploads/{}/{}", user, new_folder)) {
+            match fs::rename(format!("users/{}/uploads/{}", user, old_folder), format!("users/{}/uploads/{}", user, new_folder)) {
                 Ok(x) => x,
                 Err(e) => {
                     match log(&format!("{}", e), 3){
@@ -309,11 +315,11 @@ pub fn rename_folder(mut stream: TcpStream, buffer: Request, old_folder: String,
                         }
                     }
 
-                    send_error_response(&mut stream, 400, "Failed to rename the file");
+                    send_error_response(&mut stream, 400, "Failed to rename the file 3 file");
                     return;    
                 }
             };
-            match fs::rename(format!("data/{}/{}", user, old_folder), format!("data/{}/{}", user, new_folder)) {
+            match fs::rename(format!("users/{}/data/{}", user, old_folder), format!("users/{}/data/{}", user, new_folder)) {
                 Ok(x) => x,
                 Err(e) => {
                     match log(&format!("{}", e), 3){
@@ -325,7 +331,7 @@ pub fn rename_folder(mut stream: TcpStream, buffer: Request, old_folder: String,
                         }
                     }
 
-                    send_error_response(&mut stream, 400, "Failed to rename the file");
+                    send_error_response(&mut stream, 400, "Failed to rename the file 4 files");
                     return;    
                 }
             };
@@ -370,6 +376,7 @@ pub fn rename_folder(mut stream: TcpStream, buffer: Request, old_folder: String,
     }
 }
 
+//work on this function 
 pub fn delet(mut stream: TcpStream, filename: String, buffer: Request) {
         
     { 
@@ -379,100 +386,13 @@ pub fn delet(mut stream: TcpStream, filename: String, buffer: Request) {
             send_error_response(&mut stream, 404, "There was a problem getting the auth key");
             return;
         }
-        let path = format!("{}/{}", user, folder);
 
-        let folder1 = path;
-        if folder1 != "" {
+        if user != "" {
 
-            // println!("\n\nbuffer={}\n\n\n{}", String::from_utf8_lossy(&buffer.header[..]), String::from_utf8_lossy(&buffer.body.clone().unwrap()[..]));
-            if let Some(_) = memmem::find(&buffer.body.clone().unwrap()[..], b"folder=") {
-                let file = match memmem::find(&buffer.body.clone().unwrap()[..], b"filename=")
-                    .map(|p| p as usize) {
-                        Some(x) => x, 
-                        None => {
-                            println!("unnable to delete this ");
-                            match log("There has been an error finding the file/folder the user wants deleted", 3){
-                                Ok(x) => x,
-                                Err(e) => {
-                                    send_error_response(&mut stream, 400, &e);   
-                                } 
-                            }
-                            send_error_response(&mut stream, 400, "The deletion cannot be completed 💔 ");
-                            return;
-                        }
-                    };
-                let file = &buffer.body.clone().unwrap()[file + "filename=".len()..];
-                let filename = String::from_utf8_lossy(&file[..]);
+            println!("\n\nbuffer sigma skibidy ={}\n\n\n{}", String::from_utf8_lossy(&buffer.header[..]), String::from_utf8_lossy(&buffer.body.clone().unwrap()[..]));
 
-                let filename = match percent_decode_str(&filename)
-                    .decode_utf8(){
-                        Ok(x) => x,
-                        Err(e) => {
-                            println!("It has been unnable to decode\n{:?}", e);
-                            match log(&format!("Error decoding the filename: {}", e), 3){
-                                Ok(x) => x,
-                                Err(e) => {
-                                    send_error_response(&mut stream, 400, &e);   
-                                } 
-                            }
-                            send_error_response(&mut stream, 400, "The deletion cannot be completed since it contains weird characters");
-                            return;
-                        }
-                    };
-
-                let filename = match decode_html(&filename){
-                    Ok(x) => x,
-                    Err(e) => {
-                        println!("Unnable to decode html \n{:?}", e);
-                        match log(&format!("Error decoding the filename: {:?}", e), 3){
-                            Ok(x) => x,
-                            Err(e) => {
-                                send_error_response(&mut stream, 400, &e);   
-                            } 
-                        }
-                        send_error_response(&mut stream, 400, "It contains non UTF-8 characters");
-                        return;
-                    }
-                }.replace("+", " ");
-
-                println!("filename suppoised to get deleted= uploads/{}/{}", folder1, filename);
-
-                match fs::remove_file(&*format!("./uploads/{}/{}", folder1, filename)) {
-                    Ok(x) => x,
-                    Err(e) => {
-                        match log(&format!("{}", e), 3){
-                            Ok(x) => x,
-                            Err(e) => {
-                                println!("{}", e);
-                                send_error_response(&mut stream, 400, &e);
-                                return;
-                            }
-                        }
-
-                    send_error_response(&mut stream, 400, "Failed to delete the file");
-                    return;    
-                    }
-                }; //dont u dare change this shi
-                match fs::remove_file(&*format!("./data/{}/{}.txt", folder1, filename)) {
-                    Ok(x) => x,
-                    Err(e) => {
-                        match log(&format!("{}", e), 3){
-                            Ok(x) => x,
-                            Err(e) => {
-                                println!("{}", e);
-                                send_error_response(&mut stream, 400, &e);
-                                return;
-                            }
-                        }
-
-                    send_error_response(&mut stream, 400, "Failed to delete the file");
-                    return;    
-                    }
-                };
-            } else {
-                
                 // println!("deleting file={}/{}",folder1, filename);
-                match fs::remove_file(&*format!("./uploads/{}/{}", folder1, filename)) {
+                match fs::remove_file(&*format!("./users/{}/uploads{}/{}",user, folder, filename)) {
                     Ok(x) => x,
                     Err(e) => {
                         match log(&format!("{}", e), 3){
@@ -484,11 +404,11 @@ pub fn delet(mut stream: TcpStream, filename: String, buffer: Request) {
                             }
                         }
 
-                    send_error_response(&mut stream, 400, &format!("Failed to delete the file uploads ./uploads/{}/{}",folder1, filename));
+                    send_error_response(&mut stream, 400, &format!("Failed to delete the file uploads ./users/{}/uploads{}/{}", user, folder, filename));
                     return;    
                     }
                 }; //dont u dare change this shi
-                match fs::remove_file(&*format!("./data/{}/{}.txt", folder1, filename)) {
+                match fs::remove_file(&*format!("./users/{}/data{}/{}.txt", user, folder, filename)) {
                     Ok(x) => x,
                     Err(e) => {
                         match log(&format!("{}", e), 3){
@@ -504,7 +424,7 @@ pub fn delet(mut stream: TcpStream, filename: String, buffer: Request) {
                     return;    
                     }
                 };
-            }
+            
         } else {
             match log("The user is not logged it and cannot delete the file/folder", 3){
                 Ok(x) => x,
@@ -559,12 +479,12 @@ pub fn download(mut stream: TcpStream, buffer: Request, filename: String) {
         send_error_response(&mut stream, 404, "There was a problem getting the auth key");
         return;
     }
-    let path = format!("{}/{}", user, folder);
+    let path = format!("users/{}/uploads{}", user, folder);
 
     // let user = memmem::find()
 
     // println!("Filename ig ={}/{}",folder, filename);
-    let mut file = match fs::File::open(format!("uploads/{}/{}", path, filename)){
+    let mut file = match fs::File::open(format!("{}/{}", path, filename)){
         Ok(x) => x,
         Err(e) => {
             println!("The user's uploads folder cannot be read\n{:?}", e);
@@ -574,11 +494,14 @@ pub fn download(mut stream: TcpStream, buffer: Request, filename: String) {
                     send_error_response(&mut stream, 400, &e);   
                 } 
             }
+            println!("uploads/{}/{}", path, filename);
             send_error_response(&mut stream, 404, "We are unnable to locate your file, please try again later");
             return;
         }
     };
-    let mut data = match fs::File::open(format!("data/{}/{}.txt", path, filename)){
+    let path = format!("users/{}/data{}", user, folder);
+
+    let mut data = match fs::File::open(format!("{}/{}.txt", path, filename)){
         Ok(x) => x,
         Err(e) => {
             println!("The user's data folder cannot be read\n{:?}", e);
@@ -694,7 +617,7 @@ pub fn download(mut stream: TcpStream, buffer: Request, filename: String) {
         let filename = String::from_utf8_lossy(&filename[start + 1..]);
 
         let response = format!(
-            "{}{}\r\nContent-Disposition: W; filename=\"{}\"\r\nContent-Length: {}\r\n\r\n",  
+            "{}{}\r\nContent-Disposition: W; filename=\"{}\"\r\nContent-Length: \"{}\"\r\n\r\n",  
             status_line,
             content_type,
             match decode_html(&filename){
@@ -713,6 +636,9 @@ pub fn download(mut stream: TcpStream, buffer: Request, filename: String) {
             },
             read.len()
         );
+
+        println!("response download? = {}", response);
+        println!("end of response");
 
         // println!("Done with the POST download action my guy");
         match stream.write(response.as_bytes()){
@@ -827,15 +753,15 @@ pub fn add_folder(mut stream: TcpStream, buffer: Request, filename: String) {
             send_error_response(&mut stream, 404, "There was a problem getting the auth key");
             return;
         }
-        let path = format!("{}/{}", user, folder);
+        // let path = format!("{}/{}", user, folder);
 
         if folder != "" {
-            if Path::new(&format!("uploads/{}/{}", path, filename)).exists() {
+            if Path::new(&format!("users/{}/uploads/{}/{}", user, folder, filename)).exists() {
                 send_error_response(&mut stream, 403, "Folder already exists");
-                println!("uploads/{}/{}", path, filename);
+                println!("users/{}/uploads/{}/{}", user, folder, filename);
                 return;
             }
-            match fs::create_dir_all(format!("uploads/{}/{}", path, filename)){
+            match fs::create_dir_all(format!("users/{}/uploads/{}/{}", user, folder, filename)){
                 Ok(x) => x,
                 Err(e) => {
                     println!("Unnable to create the folder {}", e);
@@ -849,7 +775,7 @@ pub fn add_folder(mut stream: TcpStream, buffer: Request, filename: String) {
                     return;
                 }
             }; // handle gracefully
-            match fs::create_dir_all(format!("data/{}/{}", path, filename)){
+            match fs::create_dir_all(format!("users/{}/data/{}/{}", user, folder, filename)){
                 Ok(x) => x,
                 Err(e) => {
                     println!("Unnable to create the folder for data {}", e);
@@ -867,13 +793,39 @@ pub fn add_folder(mut stream: TcpStream, buffer: Request, filename: String) {
             // println!("uploads/{}/{:?}\n\n",folder, filename);
             
         } else {
-            match log("The folder empty so i cannot add it", 3){
+            if Path::new(&format!("users/{}/uploads/{}", user, filename)).exists() {
+                send_error_response(&mut stream, 403, "Folder already exists");
+                println!("users/{}/uploads/{}", user, filename);
+                return;
+            }
+            match fs::create_dir_all(format!("users/{}/uploads/{}", user, filename)){
                 Ok(x) => x,
                 Err(e) => {
-                    send_error_response(&mut stream, 400, &e);   
-                } 
-            }
-            send_error_response(&mut stream, 403, "The folder name is empty");
+                    println!("Unnable to create the folder {}", e);
+                    match log(&format!("Error creating the folder: {}", e), 3){
+                        Ok(x) => x,
+                        Err(e) => {
+                            send_error_response(&mut stream, 400, &e);   
+                        } 
+                    }
+                    send_error_response(&mut stream, 500, "We were unnable to create you folder, please try again later");
+                    return;
+                }
+            }; // handle gracefully
+            match fs::create_dir_all(format!("users/{}/data/{}", user, filename)){
+                Ok(x) => x,
+                Err(e) => {
+                    println!("Unnable to create the folder for data {}", e);
+                    match log(&format!("Error generating the data folder: {}", e), 3){
+                        Ok(x) => x,
+                        Err(e) => {
+                            send_error_response(&mut stream, 400, &e);   
+                        } 
+                    }
+                    send_error_response(&mut stream, 500, "We were unnable to create you folder for data, please try again later");
+                    return;
+                }
+            };
         }
     }
 
@@ -1008,8 +960,9 @@ fn add_file(
     //first of all the logic is wrong
         //and also make it so thatit appends the file end as it should yk?
         //IMPORTANT************************************************************************************************************
-    let filename_upload = format!("uploads/{}/{}{}", 
-        path,
+    let filename_upload = format!("users/{}/uploads{}/{}{}", 
+        user,
+        folder,
         disk_filename,
         extension
     );
@@ -1034,12 +987,12 @@ fn add_file(
         }
     }
 
-    let filename_data = format!("data/{}/{}{}.txt", 
-        path,
+   let filename_data = format!("users/{}/data{}/{}{}.txt", 
+        user,
+        folder,
         disk_filename,
         extension
     );
-    // println!("filename_data = {}", filename_data);
     // println!("filename_data = {}", filename_data);
 
     let date = match get_date() {
@@ -1059,11 +1012,13 @@ fn add_file(
     };
 
     let mut file2 = fs::File::create(&filename_data).unwrap();
-    match file2.write_all(
-        &format!("Content-Type:{};file_name:\"{}\";
-        date:\"{}\";
-        time:\"{}\";
-        Content-Length: \"{}\"", content_type, user_filename, date, time, length).into_bytes()[..]) {
+    match file2.write_all( &format!("Content-Type:{};\nfile_name:\"{}\";\ndate:\"{}\";\ntime:\"{}\";\nContent-Length: \"{}\"", 
+        content_type,
+        user_filename, 
+        date, 
+        time,
+        length
+    ).into_bytes()[..]) {
         Ok(x) => x,
         Err(e) => {
             match log(&format!("{}", e), 3){
