@@ -1,6 +1,13 @@
 use super::*;
 
-pub fn path_traversal_check(path: &str) -> bool {
+pub fn path_traversal_check(path: &str) -> bool { 
+    println!("Path la security: {}\n\n", path );
+    // let base = fs::canonicalize("C:\\Users\\YourDeath27\\coding\\rust\\projects\\http_file_server\\users");
+    // println!("Base path: {}", base.unwrap().display());
+    
+    println!("{}", std::env::current_dir().unwrap().display());
+
+
     if path.contains("../") || path.contains("..\\") || path.contains("..") || path.contains("%"){
         return true;
     }
@@ -14,7 +21,7 @@ pub fn decode_and_check_path(buffer:Request) -> Result<String, ()> { //can it ge
         String::from_utf8_lossy(&buffer.header.clone()[..]), 
     ); //decode here the string and then parse it 
 
-    println!("the post body: {:?}", String::from_utf8_lossy(&buffer.body.clone().unwrap()[..]));
+    // println!("the post body: {:?}", String::from_utf8_lossy(&buffer.body.clone().unwrap()[..]));
 
     if path_traversal_check(&String::from_utf8_lossy(&buffer.header.clone()[..])) {
         return Err(());
