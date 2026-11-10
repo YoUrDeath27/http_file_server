@@ -301,7 +301,7 @@ fn handle_connection(mut stream: TcpStream) {
 fn get_method(mut stream: TcpStream, request: Request) {
     // let buffer = &request.body.as_ref().unwrap()[..];
 
-    let connected = if let Some(_) = memmem::find(&request.header[..], b"Cookie: Auth").map(|p| p as usize) {
+    let connected = if !checkAuth(&mut stream, request.clone()).is_empty() {
         match log(&*String::from("The user is authenticated"), 1){
             Ok(x) => x,
             Err(e) => {
@@ -392,7 +392,7 @@ fn post_method(mut stream: TcpStream, buffer: Request) {
         post_action(stream, buffer, action);
     } else if memmem::find(&buffer.body.clone().unwrap()[..], b"**password=").is_some(){
         auth_pass_existing(stream, buffer);
-    } else if memmem::find(&buffer.body.clone().unwrap()[..], b"**account=").is_some(){
+    } else if memmem::find(&buffer.body.clone().unwrap()[..], b"**account").is_some(){
         auth_user(stream, buffer);
     } else if memmem::find(&buffer.body.clone().unwrap()[..], b"**logout=").is_some(){
         logout(stream, buffer);
@@ -521,9 +521,14 @@ fn post_action(mut stream: TcpStream, buffer: Request, action: usize) {
         .replace("+", " ");
     println!("filename after decoding: {}", filename);
 
-    let loc = memmem::rfind(&filename.as_bytes(), b".txt").map(|p| p as usize).unwrap_or(0);
-
-    let filename = String::from_utf8_lossy(&filename.as_bytes()[..loc]).to_string(); 
+    let filename = if action[..] == *b"OPEN_FOLDER" || action[..] == *b"ADD_FOLDER" {
+        filename
+    } else {
+        match memmem::rfind(&filename.as_bytes(), b".txt").map(|p| p as usize) {
+            Some(loc) => String::from_utf8_lossy(&filename.as_bytes()[..loc]).to_string(),
+            None => filename,
+        }
+    };
 
     if path_traversal_check(&filename) {
 
@@ -617,7 +622,11 @@ fn post_action(mut stream: TcpStream, buffer: Request, action: usize) {
         download_folder(stream, buffer, filename);
     } else if action[..] == *b"OPEN_FOLDER" {
         let folder = checkFolder(&mut stream, buffer.clone());
-        let path = format!("{}/{}", folder, filename);
+        let path = if folder.is_empty() {
+            filename.clone()
+        } else {
+            format!("{}/{}", folder.trim_matches('/'), filename.trim_matches('/'))
+        };
         // println!("path: {}", path);
 
         let site = web(&mut stream, buffer.clone());

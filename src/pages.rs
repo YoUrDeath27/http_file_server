@@ -100,11 +100,21 @@
             .file-section {{ border-top: 1px solid var(--line); margin-top: 28px; padding-top: 20px; }}
             .file-section:first-child {{ border-top: 0; margin-top: 0; padding-top: 0; }}
             .file-section h3 {{ color: var(--muted); font-size: .78rem; letter-spacing: .12em; margin: 0 0 12px; text-transform: uppercase; }}
-            .file-grid {{ display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }}
-            .file-grid li {{ align-items: flex-start; background: var(--panel); border: 1px solid transparent; border-radius: 13px; display: flex; flex-direction: column; gap: 12px; justify-content: space-between; min-height: 150px; padding: 18px; position: relative; transition: border-color .2s ease, background .2s ease, transform .2s ease; }}
+            .file-grid {{ display: grid; gap: 12px; grid-template-columns: repeat(var(--columns, 3), minmax(0, 1fr)); }}
+            .file-grid li {{ align-items: center; background: var(--panel); border: 1px solid transparent; border-radius: 13px; display: flex; flex-direction: column; gap: 12px; justify-content: space-between; min-height: 150px; padding: 18px; position: relative; transition: border-color .2s ease, background .2s ease, transform .2s ease; }}
             .file-grid li:hover {{ background: var(--panel-soft); border-color: #3b555d; transform: translateY(-3px); }}
-            .file-grid li h3 {{ font-size: 1rem; margin: auto 0 0; overflow: hidden; text-overflow: ellipsis; width: 100%; white-space: nowrap; }}
+            .folder-card {{ cursor: pointer; }}
+            .file-grid li h3 {{ font-size: 1rem; margin: auto 0 0; overflow: hidden; text-align: center; text-overflow: ellipsis; width: 100%; white-space: nowrap; }}
             .card-top {{ align-items: center; display: flex; justify-content: space-between; width: 100%; }}
+            .card-preview {{ align-items: center; background: #101719; border-radius: 9px; display: flex; height: 130px; justify-content: center; overflow: hidden; width: 100%; }}
+            .card-preview img, .card-preview video {{ height: 100%; max-width: 100%; object-fit: contain; width: 100%; }}
+            .card-preview video {{ object-fit: contain; }}
+            .card-preview {{ cursor: zoom-in; }}
+            .media-viewer {{ align-items: center; background: #050708dd; display: none; inset: 0; justify-content: center; padding: 5vh 5vw; position: fixed; z-index: 100; }}
+            .media-viewer.open {{ display: flex; }}
+            .media-viewer img, .media-viewer video {{ max-height: 90vh; max-width: 90vw; object-fit: contain; }}
+            .media-viewer-close {{ background: #273238; border: 1px solid #53656b; border-radius: 50%; color: var(--text); font-size: 1.5rem; height: 42px; line-height: 1; padding: 0; position: absolute; right: 24px; top: 24px; width: 42px; }}
+            .media-viewer-close:hover {{ background: var(--accent); color: #0c2025; }}
             .file-icon {{ align-items: center; background: #62c6d91c; border-radius: 10px; color: var(--accent); display: flex; font-size: 1.7rem; height: 48px; justify-content: center; width: 48px; }}
             .folder-icon {{ background: #d3a75322; border-radius: 4px 6px 6px 6px; display: block; height: 30px; position: relative; transform-origin: bottom left; transition: transform .25s ease; width: 40px; }}
             .folder-icon::before {{ background: #d3a753; border-radius: 4px 5px 0 0; content: ""; height: 7px; left: 3px; position: absolute; top: -5px; width: 17px; }}
@@ -113,21 +123,27 @@
             .folder-card:hover .folder-icon::after {{ transform: perspective(80px) rotateX(-35deg); }}
             .options_file, .options_folder {{ background: transparent; color: var(--muted); font-size: 1.7rem; line-height: 1; padding: 8px 12px; }}
             .options_file:hover, .options_folder:hover {{ background: #62c6d91c; color: var(--accent); }}
-            .options {{ align-items: center; background: #111719f5; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 15px 35px #00000055; display: flex; gap: 14px; padding: 12px; }}
-            .options form {{ margin: 0 0 8px; }}
+            .options {{ align-items: stretch; align-self: stretch; background: #111719f5; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 15px 35px #00000055; display: flex; flex-direction: column; gap: 8px; padding: 12px; }}
+            .options > div {{ width: 100%; }}
+            .options form {{ margin: 0 0 8px; width: 100%; }}
             .options form:last-child {{ margin-bottom: 0; }}
-            .options button {{ background: var(--panel-soft); color: var(--text); font-size: .82rem; padding: 8px 10px; width: 100%; }}
+            .options input[type="text"] {{ display: block; margin: 0 0 8px; max-width: 100%; width: 100%; }}
+            .options button {{ background: var(--panel-soft); color: var(--text); display: block; font-size: .82rem; margin: 0 auto; padding: 8px 10px; text-align: center; width: 100%; }}
             .options form:first-child button {{ color: var(--danger); }}
             .options img, .options video {{ border-radius: 7px; max-height: 180px; max-width: 220px; object-fit: contain; }}
             .loader-container {{ color: var(--muted); padding: 42px 20px; text-align: center; }}
             .spinner {{ border: 5px solid #ffffff12; border-left-color: var(--accent); border-radius: 50%; display: inline-block; height: 42px; width: 42px; animation: spin 1s linear infinite; }}
             .empty-state {{ color: var(--muted); padding: 34px 12px; text-align: center; }}
+            .error-state {{ color: var(--danger); padding: 34px 12px; text-align: center; }}
+            .error-state p {{ color: var(--muted); }}
+            .error-state button {{ margin-top: 8px; }}
             @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
             @media (max-width: 700px) {{
                 body {{ padding: 12px 12px 32px; }}
                 #banner {{ top: 8px; }}
                 #banner p {{ display: none; }}
                 .actions {{ grid-template-columns: 1fr; }}
+                .file-grid {{ grid-template-columns: repeat(min(var(--columns, 3), 2), minmax(0, 1fr)); }}
                 .options {{ align-items: stretch; flex-direction: column; }}
                 .options img, .options video {{ max-width: 100%; }}
             }}
@@ -184,6 +200,16 @@
                             <option value="6">Small to Big</option>
                         </select>
                     </label>
+                    <label>Files per row:
+                        <select id="columns" aria-label="Files per row">
+                            <option value="1">1</option>
+                            <option value="2">2</option>
+                            <option value="3" selected>3</option>
+                            <option value="4">4</option>
+                            <option value="5">5</option>
+                            <option value="6">6</option>
+                        </select>
+                    </label>
                 </div>
                 <div id="files-window">
         "#
@@ -237,16 +263,20 @@
             </section>
             </main>
             </body>
+            <div class=\"media-viewer\" id=\"media-viewer\" role=\"dialog\" aria-modal=\"true\" aria-label=\"Media preview\">
+                <button class=\"media-viewer-close\" id=\"media-viewer-close\" type=\"button\" aria-label=\"Close preview\">&times;</button>
+                <div id=\"media-viewer-content\"></div>
+            </div>
             <script>
 
             function open_file_options(file){
-                const options = file.nextElementSibling;
+                const options = file.closest('li').querySelector('.options');
                 const isOpen = options.style.display === 'flex';
                 document.querySelectorAll('.options').forEach(item => item.style.display = 'none');
                 options.style.display = isOpen ? 'none' : 'flex';
             }
             function open_folder_options(folder){
-                const options = folder.nextElementSibling;
+                const options = folder.closest('li').querySelector('.options');
                 const isOpen = options.style.display === 'flex';
                 document.querySelectorAll('.options').forEach(item => item.style.display = 'none');
                 options.style.display = isOpen ? 'none' : 'flex';
@@ -258,6 +288,55 @@
             const bread = document.getElementById('breadcrumb');
             const option = document.getElementById('ordering');
             const search = document.getElementById('file-search');
+            const columns = document.getElementById('columns');
+            const mediaViewer = document.getElementById('media-viewer');
+            const mediaViewerContent = document.getElementById('media-viewer-content');
+            const mediaViewerClose = document.getElementById('media-viewer-close');
+            let searchTimer;
+
+            function currentFolder() {
+                const match = document.cookie.match(/(?:^|;\s*)Folder=(?:"folder-|folder-)([^";]*?)-token"?(?:;|$)/);
+                return match ? match[1].replace(/^\/+|\/+$/g, '') : '';
+            }
+
+            function open_media_viewer(event, element) {
+                event.stopPropagation();
+                const media = element.querySelector('img, video');
+                if (!media) {
+                    return;
+                }
+
+                mediaViewerContent.innerHTML = '';
+                const enlarged = media.cloneNode(true);
+                enlarged.removeAttribute('style');
+                if (enlarged.tagName === 'VIDEO') {
+                    enlarged.controls = true;
+                    enlarged.autoplay = true;
+                }
+                mediaViewerContent.appendChild(enlarged);
+                mediaViewer.classList.add('open');
+            }
+
+            function close_media_viewer() {
+                const video = mediaViewerContent.querySelector('video');
+                if (video) {
+                    video.pause();
+                }
+                mediaViewer.classList.remove('open');
+                mediaViewerContent.innerHTML = '';
+            }
+
+            mediaViewer.addEventListener('click', function(event) {
+                if (event.target === mediaViewer) {
+                    close_media_viewer();
+                }
+            });
+            mediaViewerClose.addEventListener('click', close_media_viewer);
+            document.addEventListener('keydown', function(event) {
+                if (event.key === 'Escape') {
+                    close_media_viewer();
+                }
+            });
 
             document.addEventListener('DOMContentLoaded', function() {
                 breadcrumbs();
@@ -268,11 +347,21 @@
                 getFiles(element.value);
             }
 
+            columns.addEventListener('change', function() {
+                filesWindow.style.setProperty('--columns', columns.value);
+            });
+            filesWindow.style.setProperty('--columns', columns.value);
+
             search.addEventListener('input', function() {
-                const query = search.value.toLowerCase().trim();
-                filesWindow.querySelectorAll('li').forEach(file => {
-                    file.hidden = !file.querySelector('h3').textContent.toLowerCase().includes(query);
-                });
+                clearTimeout(searchTimer);
+                searchTimer = setTimeout(function() {
+                    const query = search.value.toLowerCase().trim();
+                    if (query) {
+                        searchAllFolders(query);
+                    } else {
+                        getFiles(option.value);
+                    }
+                }, 250);
             });
 
             const uploadZone = document.getElementById('upload-form');
@@ -295,6 +384,30 @@
             });
 
             function breadcrumbs() {
+                const cookieMatch = document.cookie.match(/(?:^|;\s*)Folder=(?:"folder-|folder-)([^";]*?)-token"?(?:;|$)/);
+                const currentFolder = cookieMatch ? cookieMatch[1].replace(/^\/+|\/+$/g, '') : "";
+                if (!currentFolder) {
+                    bread.innerHTML = "";
+                    return;
+                }
+                const depth = currentFolder.split('/').filter(Boolean).length;
+                bread.innerHTML = `
+                    <strong>Location:</strong> /${currentFolder}
+                    <br>
+                    <form action="/" method="POST">
+                        <input type="hidden" name="**action" value="**home">
+                        <input type="hidden" name="filename" value="/">
+                        <button type="submit">Go home</button>
+                    </form>
+                    ${depth > 1 ? `
+                    <form action="/" method="POST">
+                        <input type="hidden" name="**action" value="**open_folder..">
+                        <input type="hidden" name="filename" value="/">
+                        <button type="submit">Go back one level</button>
+                    </form>` : ""}
+                `;
+                return;
+
                 let str = document.cookie;
                 let first = str.indexOf("Folder=\"folder-");
                 let end = str.indexOf("-token");
@@ -336,6 +449,75 @@
                     `
                     }
                 }
+
+            }
+
+            function open_folder_card(event, card) {
+                if (event.target.closest('.options') || event.target.closest('button')) {
+                    return;
+                }
+                const openForm = card.querySelector('input[value="OPEN_FOLDER"]').closest('form');
+                const folder = card.dataset.folder;
+                if (folder && !openForm.querySelector('input[name="folder"]')) {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = 'folder';
+                    input.value = folder;
+                    openForm.appendChild(input);
+                }
+                openForm.submit();
+            }
+
+            async function requestFiles(value, folder = '') {
+                const response = await fetch('/files_fetch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ order: String(value), folder: folder }),
+                });
+                const contentType = response.headers.get('content-type') || '';
+                const body = await response.text();
+                if (!response.ok) {
+                    throw new Error(`Server returned ${response.status} ${response.statusText || 'an error'}`);
+                }
+                if (!contentType.includes('application/json')) {
+                    throw new Error('The server returned an unexpected response');
+                }
+                const data = JSON.parse(body);
+                if (!Array.isArray(data)) {
+                    throw new Error('The server returned an invalid file list');
+                }
+                return data;
+            }
+
+            async function searchAllFolders(query) {
+                filesWindow.innerHTML = `<div class="loader-container"><p>⌛ Searching your folders...</p><div class="spinner"></div></div>`;
+                try {
+                    const pending = [currentFolder()];
+                    const visited = new Set();
+                    const matches = [];
+                    while (pending.length > 0) {
+                        const batch = pending.splice(0, pending.length)
+                            .filter(folder => !visited.has(folder));
+                        batch.forEach(folder => visited.add(folder));
+                        const results = await Promise.all(
+                            batch.map(async folder => ({ folder, data: await requestFiles(option.value, folder) }))
+                        );
+                        results.forEach(({ folder, data }) => {
+                            data.forEach(file => {
+                                file.folder = folder;
+                                if (file.realname.toLowerCase().includes(query)) {
+                                    matches.push(file);
+                                }
+                                if (!file.is_file) {
+                                    pending.push(folder ? `${folder}/${file.name}` : file.name);
+                                }
+                            });
+                        });
+                    }
+                    insertFiles(matches);
+                } catch (error) {
+                    showFilesError(error);
+                }
             }
 
             async function getFiles(value) {
@@ -348,24 +530,8 @@
                 </div>
             `;
 
-                const params = {
-                    order: value,
-                };
-
-                const options = {
-                    method: 'POST',
-                    body: JSON.stringify( params ),
-                };  
-
-                console.log(options);
                 try {
-                    const response = await fetch('/files_fetch', options);
-
-                    console.log(response);
-                    let data = await response.json();
-                    console.log("data??");
-                    console.log(data);
-
+                    const data = await requestFiles(value, currentFolder());
                     insertFiles(data);
                     /*
                     setTimeout(() => { //simulate slow server
@@ -374,10 +540,23 @@
                     */
 
                 } catch (error) {
-                    console.error('Error loading the files:', error);
-                    filesWindow.innerHTML = `<p style="color: red;">❌ Failed to load files: ${error.message}</p>`;
+                    showFilesError(error);
                 }
                 
+            }
+
+            function showFilesError(error) {
+                console.error('Error loading the files:', error);
+                filesWindow.innerHTML = `
+                    <div class="error-state">
+                        <h3>Unable to load files</h3>
+                        <p>${error.message}</p>
+                        <button type="button" id="retry-files">Try again</button>
+                    </div>
+                `;
+                document.getElementById('retry-files').addEventListener('click', function() {
+                    getFiles(option.value);
+                });
             }
 
             function insertFiles(list) {
@@ -392,7 +571,10 @@
                         if (file.is_file == true) {
                             if (file.file_type == "image") {
                                 return `
-                                <li class="file-card">
+                                <li class="file-card" data-folder="${file.folder || ''}">
+                                    <div class="card-preview" onclick="open_media_viewer(event, this)">
+                                        <img src="${file.u_path}" alt="${file.realname}" onerror="this.closest('.card-preview').classList.add('preview-failed'); this.alt='Preview unavailable: ${file.realname}'">
+                                    </div>
                                     <div class="card-top">
                                         <span class="file-icon">▧</span>
                                         <button class=\"options_file\" id=\"${file.id}\" onclick=\"open_file_options(this)\">
@@ -413,12 +595,17 @@
                                                 <button type=\"submit\"> DOWNLOAD </button>
                                             </form>
                                         </div>
-                                        <img src=${file.u_path} alt =\"IDFK\" style=\"max-width: 300px;\" >
                                     </div>
                                 </li>`
                             } else if (file.file_type == "video") {
                                 return ` 
-                                <li class="file-card">
+                                <li class="file-card" data-folder="${file.folder || ''}">
+                                    <div class="card-preview" onclick="open_media_viewer(event, this)">
+                                        <video controls preload="metadata">
+                                            <source src="${file.u_path}" type="${file.f_type}">
+                                            Your browser doesnt support my video :'(
+                                        </video>
+                                    </div>
                                     <div class="card-top">
                                         <span class="file-icon">▶</span>
                                         <button class=\"options_file\" id=\"${file.id}\" onclick=\"open_file_options(this)\">
@@ -439,16 +626,12 @@
                                                 <button type=\"submit\"> DOWNLOAD </button>
                                             </form>
                                         </div>
-                                        <video width=\"300\" height =\"240\" controls>
-                                            <source src=\"${file.u_path}\" type=\"${file.f_type}\">
-                                            Your browser doesnt support my video :'(
-                                        </video>
                                     </div>
                                 </li>
                                 `
                             } else if (file.file_type == "text") {
                                 return ` 
-                                <li class="file-card">
+                                <li class="file-card" data-folder="${file.folder || ''}">
                                     <div class="card-top">
                                         <span class="file-icon">≡</span>
                                         <button class=\"options_file\" id=\"${file.id}\" onclick=\"open_file_options(this)\">
@@ -475,7 +658,7 @@
                             }
                         } else {
                             return `
-                            <li class="file-card folder-card">
+                            <li class="file-card folder-card" data-folder="${file.folder || ''}" onclick="open_folder_card(event, this)">
                                 <div class="card-top">
                                     <span class="file-icon"><span class="folder-icon" aria-hidden="true"></span></span>
                                     <button class="options_folder" id="${file.id}" onclick="open_folder_options(this)">
@@ -493,8 +676,8 @@
                                         <form action="/" method ="POST">
                                             <input type= "hidden" name= "**action" value= "RENAME_FOLDER">
                                             <input type= "hidden" name= "filename" value= "${file.name}">
-                                            <input type= "text\" name= "newFile">
-                                            <button type= "submit">Rename</button>
+                                            <input type="text" name="newFile" placeholder="Enter a new name" aria-label="New folder name">
+                                            <button type="submit">Rename folder</button>
                                         </form>
                                         <form action="/" method="POST">
                                             <input type= "hidden" name= "**action" value= "DOWNLOAD_FOLDER">
@@ -516,6 +699,18 @@
                         ${folders.length ? `<section class="file-section"><h3>Folders</h3><div class="file-grid">${renderItems(folders)}</div></section>` : ''}
                         ${files.length ? `<section class="file-section"><h3>Files</h3><div class="file-grid">${renderItems(files)}</div></section>` : ''}
                     `;
+                    filesWindow.querySelectorAll('li[data-folder] form').forEach(form => {
+                        form.addEventListener('submit', function() {
+                            const folder = form.closest('li').dataset.folder;
+                            if (folder && !form.querySelector('input[name="folder"]')) {
+                                const input = document.createElement('input');
+                                input.type = 'hidden';
+                                input.name = 'folder';
+                                input.value = folder;
+                                form.appendChild(input);
+                            }
+                        });
+                    });
                 }
             }
         "#);
@@ -530,17 +725,19 @@
 
 
     pub fn send_error_response(stream: &mut TcpStream, code: u16, message: &str) {
+        let reference = error_reference(code, message);
         let status_line = match code {
             400 => "HTTP/1.1 400 Bad Request",
             403 => "HTTP/1.1 403 Forbidden",
             404 => "HTTP/1.1 404 Not Found",
-            // 413 => "HTTP/1.1 413 Payload Too Large",
+            413 => "HTTP/1.1 413 Payload Too Large",
             420 => "HTTP/1.1 420 I know you are the bay harbour butcher",
             500 => "HTTP/1.1 500 Internal Server Error",
+            510 => "HTTP/1.1 510 Not Extended",
             _ => "HTTP/1.1 500 Internal Server Error",
         };
 
-        let response = format!("{}\r\n\r\n{}", status_line, error_web(message));
+        let response = format!("{}\r\n\r\n{}", status_line, error_web(code, &reference, message));
         // println!("reponse =\n{}", response);
         
         if let Err(e) = stream.write_all(response.as_bytes()) {
@@ -565,173 +762,89 @@
         }
     }
 
-    pub fn error_web(message: &str) -> String {
+    pub fn error_web(code: u16, reference: &str, message: &str) -> String {
         let mut html = String::from(
-            "
-        <!DOCTYPE html>
-        <html>
+            r#"<!DOCTYPE html>
+        <html lang="en">
         <head>
-        <title> Error processing your request </title>
-        </head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Request error | File Manager</title>
         <style>
-
-            html {
-                color-scheme: dark;
-            }
-            body{
-                color : #d1cfccfc;
-            }
-            button {
-                display: flex;
-                margin: auto;
-                height: 100px;
-                width: 343px;
-                font-size: 32px;
-                padding: 0;
-            }
-            
+            :root { color-scheme: dark; --page: #111518; --panel: #1b2125; --line: #303b41; --text: #e8edf0; --muted: #9caab1; --accent: #62c6d9; --danger: #e87979; }
+            * { box-sizing: border-box; }
+            body { align-items: center; background: radial-gradient(circle at 15% 0%, #1d3035 0, var(--page) 38rem); color: var(--text); display: flex; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; justify-content: center; margin: 0; min-height: 100vh; padding: 24px; }
+            .error-panel { background: #1a2125ee; border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 24px 70px #00000045; max-width: 620px; padding: clamp(28px, 6vw, 48px); width: 100%; }
+            .error-mark { align-items: center; background: #e879791c; border: 1px solid #e8797955; border-radius: 12px; color: var(--danger); display: flex; font-size: 1.35rem; height: 48px; justify-content: center; margin-bottom: 22px; width: 48px; }
+            h1 { font-size: clamp(1.7rem, 5vw, 2.35rem); letter-spacing: -.04em; margin: 0 0 10px; }
+            .message { color: var(--muted); font-size: 1.05rem; line-height: 1.6; margin: 0 0 20px; }
+            .reference { background: #12181b; border: 1px solid var(--line); border-radius: 9px; color: var(--muted); margin: 0 0 28px; padding: 12px 14px; }
+            .reference strong { color: var(--text); }
+            button { background: var(--accent); border: 0; border-radius: 9px; color: #0c2025; cursor: pointer; font: inherit; font-weight: 700; padding: 12px 16px; transition: background .18s ease, box-shadow .18s ease, transform .18s ease; }
+            button:hover { background: #86d9e7; box-shadow: 0 5px 18px #3caabd33; transform: translateY(-1px); }
+            button:active { transform: translateY(0); }
         </style>
+        </head>
         <body>
-        ",
+        <main class="error-panel">
+            <div class="error-mark">!</div>
+        "#,
         );
-        html.push_str(&*format!("<h1> {} </h1>", message));
+        html.push_str(&*format!(
+            "<h1>Request could not be completed</h1><p class=\"message\">{}</p><p class=\"reference\"><strong>Error reference:</strong> {} <span>(HTTP {})</span></p>",
+            message, reference, code
+        ));
         html.push_str(
-            "
-            <button onclick=\"window.location.href='/'\"> Go back to the main page </button>
-        ",
+            r#"<button onclick="window.location.href='/'">Go back to the main page</button>
+        </main>
+        </body>
+        </html>"#,
         );
-
-        html.push_str(" </body> </html>");
 
         html
     }
 
     pub fn login_signup() -> String {
-        let html = String::from("
-            <!DOCTYPE html>
-            <html>
-            <head>
-            <title> Login / Signup bro </title>
-            </head>
-
-            <style>
-                html {
-                    color-scheme: dark;
-                }
-                body{
-                    color : #d1cfccfc;
-                }
-            </style>
-            <body>
-                <h1> Welcome to your File Manager Server </h1>
-
-                <h3> It seems you are not currently connected to an account <br> Please Signup or Login to use this platform<h3>
-            <h4> Username: </h4>
-            <form action=\"/\" method=\"POST\">
-                <input type=\"text\" name=\"**account\">
-                <button type=\"submit\"> Continue </button>
-            </form>
-            </body>
-            </html>
-        ");
-        html
+        String::from(r#"<!DOCTYPE html>
+        <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Sign in | File Manager</title>
+        <style>
+            :root { color-scheme: dark; --page:#111518; --panel:#1b2125; --line:#303b41; --text:#e8edf0; --muted:#9caab1; --accent:#62c6d9; }
+            * { box-sizing:border-box; } body { align-items:center; background:radial-gradient(circle at 15% 0%,#1d3035 0,var(--page) 38rem); color:var(--text); display:flex; font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; justify-content:center; margin:0; min-height:100vh; padding:24px; }
+            .panel { background:#1a2125ee; border:1px solid var(--line); border-radius:18px; box-shadow:0 24px 70px #00000045; max-width:460px; padding:clamp(28px,6vw,48px); width:100%; }
+            .mark { align-items:center; background:#62c6d91c; border:1px solid #62c6d955; border-radius:12px; color:var(--accent); display:flex; font-size:1.35rem; height:48px; justify-content:center; margin-bottom:22px; width:48px; }
+            h1 { font-size:clamp(1.7rem,5vw,2.25rem); letter-spacing:-.04em; margin:0 0 8px; } p { color:var(--muted); line-height:1.6; margin:0 0 26px; }
+            label { color:var(--muted); display:block; font-size:.86rem; font-weight:700; margin-bottom:8px; } form { display:grid; gap:12px; }
+            input { background:#12181b; border:1px solid var(--line); border-radius:9px; color:var(--text); font:inherit; padding:12px 13px; width:100%; } input:focus { border-color:var(--accent); outline:2px solid #62c6d955; outline-offset:2px; }
+            button { background:var(--accent); border:0; border-radius:9px; color:#0c2025; cursor:pointer; font:inherit; font-weight:700; margin-top:6px; padding:12px 16px; } button:hover { background:#86d9e7; box-shadow:0 5px 18px #3caabd33; }
+        </style></head><body><main class="panel"><div class="mark">↗</div><h1>Welcome back</h1>
+        <p>Sign in or create an account to manage your files in one private workspace.</p>
+        <form action="/" method="POST"><label for="account">Username</label><input id="account" type="text" name="**account" autocomplete="username" required><button type="submit">Continue</button></form>
+        </main></body></html>"#)
     }
 
     pub fn password(name: String, extra_info: Option<&str>) -> String { 
-        
-        let mut html = String::from(format!("
-            <!DOCTYPE html>
-            <html>
-            <head>
-            <title> Login / Signup bro </title>
-            </head>
-            <style>
-                html {{
-                    color-scheme: dark;
-                }}
-                body{{
-                    color : #d1cfccfc;
-                }}
-            </style>
-            <body>
-                <h1> Welcome to your File Manager Server </h1>
-
-                <h3> Enter the password for your account<h3>
-
-                <h4> Password: </h4>
-            <form action=\"/\" method=\"POST\">
-                <input type=\"hidden\" name=\"**account\" value=\"{}\">
-                <input type=\"text\" name=\"**password\">
-                <button type=\"submit\"> Login/Signup </button>
-            </form>
-            <br><br>
-
-            
-        ",
-        name
-        ));
+        let mut html = String::from(format!(r#"<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Enter password | File Manager</title>
+        <style>
+            :root {{ color-scheme:dark; --page:#111518; --panel:#1b2125; --line:#303b41; --text:#e8edf0; --muted:#9caab1; --accent:#62c6d9; }}
+            * {{ box-sizing:border-box; }} body {{ align-items:center; background:radial-gradient(circle at 15% 0%,#1d3035 0,var(--page) 38rem); color:var(--text); display:flex; font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; justify-content:center; margin:0; min-height:100vh; padding:24px; }}
+            .panel {{ background:#1a2125ee; border:1px solid var(--line); border-radius:18px; box-shadow:0 24px 70px #00000045; max-width:460px; padding:clamp(28px,6vw,48px); width:100%; }} .mark {{ color:var(--accent); font-size:1.35rem; margin-bottom:22px; }} h1 {{ font-size:clamp(1.7rem,5vw,2.25rem); letter-spacing:-.04em; margin:0 0 8px; }} p {{ color:var(--muted); line-height:1.6; margin:0 0 26px; }} label {{ color:var(--muted); display:block; font-size:.86rem; font-weight:700; margin-bottom:8px; }} form {{ display:grid; gap:12px; }} input {{ background:#12181b; border:1px solid var(--line); border-radius:9px; color:var(--text); font:inherit; padding:12px 13px; width:100%; }} button {{ background:var(--accent); border:0; border-radius:9px; color:#0c2025; cursor:pointer; font:inherit; font-weight:700; margin-top:6px; padding:12px 16px; }} button:hover {{ background:#86d9e7; }}
+        </style></head><body><main class="panel"><div class="mark">File Manager / {}</div><h1>Enter your password</h1><p>Continue to your private workspace.</p><form action="/" method="POST"><input type="hidden" name="**account" value="{}"><label for="password">Password</label><input id="password" type="password" name="**password" autocomplete="current-password" required><button type="submit">Login</button></form>"#, name, name));
 
         if let Some(info) = extra_info{
             html.push_str(info);
         }
-        html.push_str("
-            </body>
-            </html>
-        ");
+        html.push_str("</main></body></html>");
         html
     }
 
     pub fn new_user(name: String ) -> String{
 
-        let mut html = String::from(format!("
-            <!DOCTYPE html>
-            <html>
-            <head>
-            <title> Set up ur account</title>
-            </head>
-            <style>
-                html {{
-                    color-scheme: dark;
-                }}
-                body{{
-                    color : #d1cfccfc;
-                }}
-            </style>
-            <body>
-                <h1> Welcome to your File Manager Server </h1>
+        let mut html = String::from(format!(r#"<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Create account | File Manager</title>
+        <style>
+            :root {{ color-scheme:dark; --page:#111518; --panel:#1b2125; --line:#303b41; --text:#e8edf0; --muted:#9caab1; --accent:#62c6d9; }} * {{ box-sizing:border-box; }} body {{ align-items:center; background:radial-gradient(circle at 15% 0%,#1d3035 0,var(--page) 38rem); color:var(--text); display:flex; font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; justify-content:center; margin:0; min-height:100vh; padding:24px; }} .panel {{ background:#1a2125ee; border:1px solid var(--line); border-radius:18px; box-shadow:0 24px 70px #00000045; max-width:520px; padding:clamp(28px,6vw,48px); width:100%; }} .mark {{ color:var(--accent); margin-bottom:22px; }} h1 {{ font-size:clamp(1.7rem,5vw,2.25rem); letter-spacing:-.04em; margin:0 0 8px; }} p {{ color:var(--muted); line-height:1.6; }} form {{ display:grid; gap:12px; }} label {{ color:var(--muted); font-size:.86rem; font-weight:700; }} input,select {{ background:#12181b; border:1px solid var(--line); border-radius:9px; color:var(--text); font:inherit; padding:12px 13px; width:100%; }} button {{ background:var(--accent); border:0; border-radius:9px; color:#0c2025; cursor:pointer; font:inherit; font-weight:700; margin-top:6px; padding:12px 16px; }} button:hover {{ background:#86d9e7; }}
+        </style></head><body><main class="panel"><div class="mark">File Manager / {}</div><h1>Create your workspace</h1><p>Set up your account and personalize your file manager.</p><form action="/" method="POST" enctype="multipart/form-data"><input type="hidden" name="**account" value="{}"><label for="password">Password</label><input id="password" type="password" name="**password" required><label for="gender">Profile option</label><select id="gender" name="gender"><option value="SMTH">Walmart Bag</option><option value="M">Male</option><option value="F">Female</option></select><label for="file">Profile picture</label><input id="file" type="file" name="file" required><button type="submit">Finish setup</button></form>"#, name, name));
 
-                <h3> Enter some info for your account <h3>
-
-                <form action=\"/\" method=\"POST\" enctype=\"multipart/form-data\">
-
-                    <input type=\"hidden\" name=\"**account\" value=\"{}\">
-
-                    <h4> Password: </h4>
-                    <input type=\"text\" name=\"**password\" required>
-                    
-                    <p> Choose your gender </p> 
-                    <select id=\"gender\" name=\"gender\">
-                        <option value=\"SMTH\">Walmart Bag</option>
-                        <option value=\"M\">Male</option>
-                        <option value=\"F\">Female</option>
-                    </select>
-
-                    <p> Profile picture (it will be cropped in a 1:1 aspect ratio in the middle so choose wisely)
-                    <input type=\"file\" name=\"file\" required>
-                    
-                    
-                    <button type=\"submit\"> Finish the Sign up </button>
-                </form>
-            <br><br>
-
-            
-        ",
-        name
-        ));
-
-        html.push_str("
-            </body>
-            </html>
-        ");
+        html.push_str("</main></body></html>");
         html
     }

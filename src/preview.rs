@@ -3,8 +3,6 @@ use super::*;
 pub fn web_send_image(mut stream:TcpStream, buffer: Request){ 
 
     let user = checkAuth(&mut stream, buffer.clone());
-    let folder = checkFolder(&mut stream, buffer.clone());
-
     let file = match memmem::find(&buffer.header[..], b" HTTP/1.1").map(|p| p as usize){
         Some(x) => x,
         None => {
@@ -36,13 +34,42 @@ pub fn web_send_image(mut stream:TcpStream, buffer: Request){
             return;
         }
     };
-    let name = String::from_utf8_lossy(&buffer.header[start..file]);
+    let name = String::from_utf8_lossy(&buffer.header[start..file])
+        .trim_start_matches('/')
+        .replace("//", "/");
     println!("name: {:?}", name);
 
-    let mut file = match fs::File::open(&*name){
+    let uploads_prefix = format!("users/{}/uploads/", user);
+    let profile_prefix = format!("users/{}/", user);
+    let (upload_path, metadata_path, relative_path) =
+        if let Some(path) = name.strip_prefix(&uploads_prefix) {
+            if path.is_empty() || path.contains("..") {
+                send_error_response(&mut stream, 400, "The preview path is invalid");
+                return;
+            }
+            (
+                format!("users/{}/uploads/{}", user, path),
+                format!("users/{}/data/{}.txt", user, path),
+                path.to_string(),
+            )
+        } else if let Some(path) = name.strip_prefix(&profile_prefix) {
+            if !path.starts_with("pfp.") || path.contains("..") {
+                send_error_response(&mut stream, 400, "The preview path is invalid");
+                return;
+            }
+            (
+                format!("users/{}/{}", user, path),
+                format!("users/{}/pfp.txt", user),
+                path.to_string(),
+            )
+        } else {
+            send_error_response(&mut stream, 400, "The preview path is invalid");
+            return;
+        };
+    let mut file = match fs::File::open(&upload_path){
         Ok(x) => x,
         Err(e) => {
-            println!("File that was attempted to be opened: {}", name);
+            println!("File that was attempted to be opened: {}", upload_path);
             println!("There has been an error opening the image\n{}", e);
             match log(&format!("Error opening the file: {}", e), 3){
                 Ok(x) => x,
@@ -57,12 +84,8 @@ pub fn web_send_image(mut stream:TcpStream, buffer: Request){
         }
     };
 
-    let mut data = String::from(name.clone());
-    data.replace_range(..&format!("users/{}/uploads/", user).len(), &format!("users/{}/data/", user));
-    data.replace_range(data.len().., ".txt"); //add at the end .txt
-
-    println!("image data: {:?}", data);
-    let mut data = match fs::File::open(&*data) { //why errorr??????????????????????//
+    println!("image data: {:?}", metadata_path);
+    let mut data = match fs::File::open(&metadata_path) {
         Ok(x) => x,
         Err(e) => {
             println!("The data image file does not exist {}", e);
@@ -78,23 +101,10 @@ pub fn web_send_image(mut stream:TcpStream, buffer: Request){
         }
     };
 
-    let buffer1 = name.as_bytes();
-    let filename = match  memmem::rfind(&buffer1, b"/").map(|p| p as usize){
-        Some(x) => x,
-        None => {
-            println!("ur seriously cooked if you get this error");
-            match log("The image filename cannot be identified", 3){
-                Ok(x) => x,
-                Err(e) => {
-                    send_error_response(&mut stream, 400, &e);   
-                    // return String::from("");
-                } 
-            }
-            send_error_response(&mut stream, 400, "Ur cooked chat");
-            return;
-        }
-    };
-    let filename = &buffer1[filename..];
+    let filename = std::path::Path::new(&relative_path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("file");
     let mut file_data = String::new();
     match data.read_to_string(&mut file_data) {
         Ok(x) => x,
@@ -132,12 +142,19 @@ pub fn web_send_image(mut stream:TcpStream, buffer: Request){
         This response needs to be re-worked 
     *********************************************************************************************
     */
+    let content_type = file_data
+        .lines()
+        .find_map(|line| line.strip_prefix("Content-Type:"))
+        .map(str::trim)
+        .unwrap_or("application/octet-stream");
+    let file_name = filename.replace('"', "");
     let status_line = "HTTP/1.1 200 OK\r\n";
-    let response = format!( 
-        "{}{}\r\nContent-Disposition: W;\r\nfilename = \"{}\"\r\n\r\n",
+    let response = format!(
+        "{}Content-Type: {}\r\nContent-Length: {}\r\nContent-Disposition: inline; filename=\"{}\"\r\n\r\n",
         status_line,
-        file_data,
-        String::from_utf8_lossy(&filename[..]),
+        content_type.trim_end_matches(';'),
+        read.len(),
+        file_name,
     );
 
     println!("\n\n\nresponse: {}", response);

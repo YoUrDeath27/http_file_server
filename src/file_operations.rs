@@ -734,7 +734,7 @@ pub fn download(mut stream: TcpStream, buffer: Request, filename: String) {
 } 
 
 pub fn add_folder(mut stream: TcpStream, buffer: Request, filename: String) {
-    if filename.contains("../") {
+    if path_traversal_check(&filename) {
         println!("Caught u red handed");
         println!("filename={}", filename);
         match log("The user tried to go out of bounds", 3){

@@ -107,7 +107,8 @@ pub fn auth_user(mut stream: TcpStream, buffer: Request) {
         if  l_user == String::from_utf8_lossy(&user[..]){
             // println!("trying to find the bug in here");
             // println!("{:?}", memmem::find(&text[..], &user[..]));
-            response = format!("{}{}", status_line, password(String::from_utf8_lossy(&user[..]).to_string(), None));//dont ask homie
+            let body = password(String::from_utf8_lossy(&user[..]).to_string(), None);
+            response = format!("{}Content-Type: text/html; charset=UTF-8\r\nContent-Length: {}\r\n\r\n{}", status_line, body.len(), body);//dont ask homie
             if let Err(e) = stream.write_all(response.as_bytes()) {
                 eprintln!("Write error: {}", e);
                 match log(&format!("Write error: {}", e), 3){
@@ -132,7 +133,8 @@ pub fn auth_user(mut stream: TcpStream, buffer: Request) {
     // println!("l_user = {}", l_user);
     // println!("user = {}", String::from_utf8_lossy(&user[..]));
 
-    response = format!("{}{}", status_line, new_user(String::from_utf8_lossy(&user[..]).to_string()));//dont ask homie
+    let body = new_user(String::from_utf8_lossy(&user[..]).to_string());
+    response = format!("{}Content-Type: text/html; charset=UTF-8\r\nContent-Length: {}\r\n\r\n{}", status_line, body.len(), body);//dont ask homie
     
 
     if let Err(e) = stream.write_all(response.as_bytes()) {
