@@ -120,9 +120,9 @@ fn main() {
     // Use a default address if the input is empty
     let port = if port == "" {
         // println!("No input provided. Using default address: 127.0.0.1:7878");
-        println!("No input provided. Using default address: 0.0.0.0:7878");
+        println!("No input provided. Using default address: 127.0.0.1:7878");
         // "127.0.0.1:7878"
-        "0.0.0.0:7878"
+        "127.0.0.1:7878"
     } else {
         port
     };
@@ -379,7 +379,7 @@ fn get_method(mut stream: TcpStream, request: Request) {
 
 fn post_method(mut stream: TcpStream, buffer: Request) {
     println!("Request header: {}", String::from_utf8_lossy(&buffer.header[..]));
-    // println!("\n\nRequest body: {:?}", String::from_utf8_lossy(&buffer.body.clone().unwrap()[..]));
+    println!("\n\nRequest body: {:?}", String::from_utf8_lossy(&buffer.body.clone().unwrap()[..]));
 
     match log(&format!("Request bosy: {:?}", String::from_utf8_lossy(&buffer.body.clone().unwrap()[..])), 3){
         Ok(x) => x,
@@ -520,6 +520,10 @@ fn post_action(mut stream: TcpStream, buffer: Request, action: usize) {
         .decode_utf8_lossy()
         .replace("+", " ");
     println!("filename after decoding: {}", filename);
+
+    let loc = memmem::rfind(&filename.as_bytes(), b".txt").map(|p| p as usize).unwrap_or(0);
+
+    let filename = String::from_utf8_lossy(&filename.as_bytes()[..loc]).to_string(); 
 
     if path_traversal_check(&filename) {
 

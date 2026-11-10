@@ -1,7 +1,7 @@
 use super::*;
 
 pub fn upload_file(mut stream: TcpStream, buffer: Request) { 
-
+    
     if memmem::find(&buffer.body.clone().unwrap()[..], b"**account").is_some(){
         auth_pass_not_existing(stream, buffer.clone());
         return;
@@ -395,33 +395,35 @@ pub fn delet(mut stream: TcpStream, filename: String, buffer: Request) {
                 match fs::remove_file(&*format!("./users/{}/uploads{}/{}",user, folder, filename)) {
                     Ok(x) => x,
                     Err(e) => {
+                        let _ = fs::remove_dir_all(&*format!("./users/{}/uploads{}/{}",user, folder, filename));
                         match log(&format!("{}", e), 3){
                             Ok(x) => x,
                             Err(e) => {
                                 println!("{}", e);
-                                send_error_response(&mut stream, 400, &e);
-                                return;
+                                // send_error_response(&mut stream, 400, &e);
+                                // return;
                             }
                         }
 
-                    send_error_response(&mut stream, 400, &format!("Failed to delete the file uploads ./users/{}/uploads{}/{}", user, folder, filename));
-                    return;    
+                    // send_error_response(&mut stream, 400, &format!("Failed to delete the file uploads ./users/{}/uploads{}/{}", user, folder, filename));
+                    // return;    
                     }
                 }; //dont u dare change this shi
                 match fs::remove_file(&*format!("./users/{}/data{}/{}.txt", user, folder, filename)) {
                     Ok(x) => x,
                     Err(e) => {
+                        let _ = fs::remove_dir_all(&*format!("./users/{}/data{}/{}",user, folder, filename));
                         match log(&format!("{}", e), 3){
                             Ok(x) => x,
                             Err(e) => {
                                 println!("{}", e);
-                                send_error_response(&mut stream, 400, &e);
-                                return;
+                                // send_error_response(&mut stream, 400, &e);
+                                // return;
                             }
                         }
                     
-                    send_error_response(&mut stream, 400, "Failed to delete the file");
-                    return;    
+                    // send_error_response(&mut stream, 400, "Failed to delete the file");
+                    // return;    
                     }
                 };
             
@@ -479,12 +481,14 @@ pub fn download(mut stream: TcpStream, buffer: Request, filename: String) {
         send_error_response(&mut stream, 404, "There was a problem getting the auth key");
         return;
     }
-    let path = format!("users/{}/uploads{}", user, folder);
+    let path = format!("users/{}/data{}", user, folder);
+    let u_path = format!("users/{}/uploads{}", user, folder);
 
     // let user = memmem::find()
 
     // println!("Filename ig ={}/{}",folder, filename);
-    let mut file = match fs::File::open(format!("{}/{}", path, filename)){
+    println!("file: {}", format!("{}/{}", path, filename));
+    let mut file = match fs::File::open(format!("{}/{}", u_path, filename)){
         Ok(x) => x,
         Err(e) => {
             println!("The user's uploads folder cannot be read\n{:?}", e);
@@ -499,7 +503,8 @@ pub fn download(mut stream: TcpStream, buffer: Request, filename: String) {
             return;
         }
     };
-    let path = format!("users/{}/data{}", user, folder);
+
+    println!("path: {}", path);
 
     let mut data = match fs::File::open(format!("{}/{}.txt", path, filename)){
         Ok(x) => x,

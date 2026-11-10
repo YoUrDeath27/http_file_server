@@ -58,7 +58,7 @@ pub fn web_send_image(mut stream:TcpStream, buffer: Request){
     };
 
     let mut data = String::from(name.clone());
-    data.replace_range(..&format!("users/{}/uploads", user).len(), &format!("users/{}/data", user));
+    data.replace_range(..&format!("users/{}/uploads/", user).len(), &format!("users/{}/data/", user));
     data.replace_range(data.len().., ".txt"); //add at the end .txt
 
     println!("image data: {:?}", data);

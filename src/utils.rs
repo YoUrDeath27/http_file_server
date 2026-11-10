@@ -749,18 +749,22 @@ pub fn bubble_sort() -> Result<Vec<String>, String> {
 pub struct Files {
     list: Vec<FileNames>,
 }
-
+/*
+***********************************************************************************************************
+CONTAINS USELESS STUFF SO REWORK IT 
+***********************************************************************************************************
+*/
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct FileNames{
+pub struct FileNames{  
     pub id: i64,
-    pub datapath: String,   //augu/sigma/1003-19-129.txt.txt
-    pub dataname: String,   // 1003-19-129.txt.txt
-    pub uploadspath: String,    //augu/sigma/1003-19-129.txt
-    pub uploadsname: String,    //1003-19-129.txt
+    pub path: String,   //augu/sigma/1003-19-129.txt.txt
+    pub u_path: String,
+    pub name: String,   // 1003-19-129.txt.txt
+    pub u_name: String,
     pub realname: String,   // text.txt
     pub file_type: String,
     pub f_type: String,
-    pub folder: String,
+    // pub folder: String, //sigma
     pub date: String,
     pub time: String,
     pub is_file: bool,
@@ -773,12 +777,12 @@ impl FileNames {
     pub fn new() -> Self {
         FileNames{
             id: 0,
-            datapath: String::from(""),
-            dataname: String::from(""),
-            uploadspath: String::from(""),
-            uploadsname: String::from(""),
+            path: String::from(""),
+            u_path: String::from(""),
+            name: String::from(""),
+            u_name: String::from(""),
             realname: String::from(""),
-            folder: String::from(""),
+            // folder: String::from(""),
             file_type: String::from(""),
             f_type: String::from(""),
             date: String::from(""),
@@ -868,7 +872,6 @@ pub fn sorting(how: u8, user: String, folder: String) -> Result<Vec<FileNames>, 
     let mut folders = Vec::new();
     let mut names = Vec::new();
 
-    let mut i = 0;
     for entry in data {
         let entry = match entry{
             Ok(x) => x,
@@ -890,7 +893,7 @@ pub fn sorting(how: u8, user: String, folder: String) -> Result<Vec<FileNames>, 
         let file_name = match entry.file_name().into_string(){
             Ok(x) => x,
             Err(e) => {
-                println!("The user's username is unnable to be converted to string\n{:?}", e);
+                // println!("The user's username is unnable to be converted to string\n{:?}", e);
                 match log(&format!("Error converting the filename in a UTF-8 format: {:?}", e), 1){
                     Ok(x) => x,
                     Err(_e) => {
@@ -943,12 +946,12 @@ pub fn sorting(how: u8, user: String, folder: String) -> Result<Vec<FileNames>, 
                 let fold = String::from_utf8_lossy(&upld_path.as_bytes()[..upld_path.len() - (file_name.len() + 1)]);
                 folders.push(FileNames{
                     id: 0,
-                    datapath: entry.path().display().to_string().replace("\\", "/"),
-                    dataname: file_name.clone(),
-                    uploadspath: upld_path.to_string(),
-                    uploadsname: file_name.to_string(),
+                    path: entry.path().display().to_string().replace("\\", "/"),
+                    u_path: upld_path.clone(),
+                    name: file_name.clone(),
+                    u_name: file_name.clone(),
                     realname: file_name.clone(),
-                    folder: fold.to_string(),
+                    // folder: fold.to_string(),
                     file_type: String::from(""),
                     f_type: String::from(""),
                     date: String::from(""),
@@ -1007,19 +1010,16 @@ pub fn sorting(how: u8, user: String, folder: String) -> Result<Vec<FileNames>, 
             file_type = String::from("text");
         }
 
-
-
-
-
-        let fold = String::from_utf8_lossy(&upld_path.as_bytes()[..upld_path.len() - (file_name.len() + 1)]);
+        // let fold = String::from_utf8_lossy(&upld_path.as_bytes()[..upld_path.len() - (file_name.len() + 1)]);
+        
         names.push(FileNames{
             id: 0,
-            datapath: entry.path().display().to_string().replace("\\", "/"),
-            dataname: file_name.clone(),
-            uploadspath: upld_path.to_string(),
-            uploadsname: upld_name.to_string(),
+            path: entry.path().display().to_string().replace("\\", "/"),
+            u_path: upld_path.clone(),
+            name: file_name.clone(),
+            u_name: upld_name.clone().to_string(),
             realname: name.to_string(),
-            folder: fold.to_string(),
+            // folder: fold.to_string(),
             file_type : file_type.to_string(),
             f_type : f_type.to_string(),
             date: date.to_string(),
@@ -1131,12 +1131,12 @@ fn sort_fn(list: Vec<FileNames>) -> Vec<FileNames> {
     for i in 0..list.len() {
         lower_list.push(FileNames{
             id: list[i].id,
-            datapath: list[i].datapath.clone(),
-            dataname: list[i].dataname.clone(),
-            uploadspath: list[i].uploadspath.clone(),
-            uploadsname: list[i].uploadsname.clone(),
+            path: list[i].path.clone(),
+            u_path: list[i].u_path.clone(),
+            name: list[i].name.clone(),
+            u_name: list[i].u_name.clone(),  
             realname: list[i].realname.to_lowercase(),
-            folder: list[i].folder.clone(),
+            // folder: list[i].folder.clone(),
             file_type: list[i].file_type.clone(),
             f_type: list[i].f_type.clone(),
             date: list[i].date.clone(),

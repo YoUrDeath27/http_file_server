@@ -156,7 +156,7 @@ pub fn auth_user(mut stream: TcpStream, buffer: Request) {
 }
 
 pub fn auth_pass_existing(mut stream: TcpStream, buffer: Request) {
-    // println!("Ur cooked {:?}", String::from_utf8_lossy(&buffer.body.clone().unwrap()[..]));
+    println!("Ur cooked {:?}", String::from_utf8_lossy(&buffer.body.clone().unwrap()[..]));
     println!("Not giving a single fuck for now abt the rest of info");
     
     let body = buffer.body.clone().unwrap();
@@ -205,7 +205,7 @@ pub fn auth_pass_existing(mut stream: TcpStream, buffer: Request) {
                     send_error_response(&mut stream, 400, &e);   
                 } 
             }
-            send_error_response(&mut stream, 510, "You gotta be jorking with me");
+            send_error_response(&mut stream, 510, "You gotta be jorking with me(existig)");
             println!("Bruh");
             return;
         }
@@ -406,7 +406,7 @@ pub fn auth_pass_not_existing(mut stream: TcpStream, buffer: Request) {
                     send_error_response(&mut stream, 400, &e);   
                 } 
             }
-            send_error_response(&mut stream, 510, "You gotta be jorking with me");
+            send_error_response(&mut stream, 510, "You gotta be jorking with me (not existing)");
             println!("Bruh");
             return;
         }

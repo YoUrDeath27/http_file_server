@@ -1,6 +1,13 @@
 use super::*;
 
 pub fn path_traversal_check(path: &str) -> bool { 
+    println!("Path la security: {}\n\n", path );
+    // let base = fs::canonicalize("C:\\Users\\YourDeath27\\coding\\rust\\projects\\http_file_server\\users");
+    // println!("Base path: {}", base.unwrap().display());
+    
+    println!("{}", std::env::current_dir().unwrap().display());
+
+
     if path.contains("../") || path.contains("..\\") || path.contains("..") || path.contains("%"){
         return true;
     }
